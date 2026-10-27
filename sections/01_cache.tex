@@ -1,0 +1,140 @@
+% !TEX root = ../main.tex
+% ---------------------------------------------------------------------
+%  P1 -- Speicherhierarchie und Cache
+% ---------------------------------------------------------------------
+\vlsec{cP1}{P1}{Speicherhierarchie \& Cache}
+\label{sec:cache}
+
+\SW{Grundproblem} Speicher ist schnell \emph{oder} gross, nie beides
+(Leitungslänge, Adressdecodierung, Preis/Bit). Jede Stufe:
+ca.\ 3--10$\times$ langsamer, 10--100$\times$ grösser.
+
+\begin{ztab}{@{}Xrr@{}}
+Ebene (Raspberry Pi 5) & Grösse & Zugriff \\ \midrule
+Register & $\sim$100\,B & 1\,Cycle \\
+L1 (I und D getrennt) & 64\,kB/Core & 4 \\
+L2 & 512\,kB/Core & 11 \\
+L3 (shared) & 2\,MB & 35 \\
+RAM & 4\,GB & $\sim$100 \\
+SD-Karte (Swap) & 128\,GB & $\sim$100\,000 \\
+\end{ztab}
+Ohne Cache wäre eine 2.4-GHz-CPU faktisch eine 24-MHz-CPU.
+
+\subsection{Locality of Reference}
+\begin{description}
+\item[Zeitlich] dieselbe Adresse bald wieder (Schleifenvariable, Stack).
+\item[Räumlich] Nachbaradresse bald (linearer Code, Arrays).
+\end{description}
+\SW{Zahlen} 90--95\,\% der Befehle laufen linear weiter. Von den Sprüngen
+$\sim$80\,\% kurze if-then-else, $\sim$20\,\% Schleifensprünge (davon
+85\,\% genommen). \ra Der Befehlsstrom bleibt in einem kleinen
+Adressfenster. Praxis: Hit Rate 66--99\,\%.
+
+\subsection{Cache Line (typisch 64\,B)}
+Drei Gründe, nie einzelne Bytes zu cachen:
+\begin{enumerate}
+\item \T{Latenz amortisieren}: RAM-Zugriff $\sim$100 Cycles, danach Burst fast gratis.
+\item \T{Verwaltung}: Tag/Valid/Dirty pro 4\,B wären grösser als die Nutzdaten.
+\item nutzt automatisch die räumliche Lokalität.
+\end{enumerate}
+
+\subsection{Adresszerlegung}
+\label{sec:zerlegung}
+\begin{center}\ttfamily\small
+|\ \ Tag\ \ |\ Index\ |\ Offset\ |
+\end{center}
+\begin{description}
+\item[Offset] (LSBs) Position \emph{innerhalb} der Line.
+\item[Index] welches \emph{Set} -- reines Adressdecodieren, kein Suchen.
+\item[Tag] Rest; mitgespeichert, sagt aus welchem RAM-Block die Line stammt.
+\end{description}
+
+\begin{rezept}[Rezept: Adresse zerlegen]
+\label{rez:zerlegung}
+\begin{enumerate}
+\item $\text{Offset-Bits}=\log_2(\text{Linegrösse})$
+\item $\#\text{Sets}=\dfrac{\text{Cachegrösse}}{\text{Line}\times\text{Assoziativität}}$,\quad
+      $\text{Index-Bits}=\log_2(\#\text{Sets})$
+\item $\text{Tag-Bits}=\text{Adressbreite}-\text{Index}-\text{Offset}$
+\item Probe: $\#\text{Blöcke}\times\#\text{Sets}\times\text{Line}=$ Adressraum
+\end{enumerate}
+\end{rezept}
+
+\begin{bsp}[Beispiel: L1 des Pi 5]
+64\,kB, 64\,B Lines, 4-way.
+$\#\text{Sets}=\frac{65536}{64\cdot4}=256$ \ra
+6 Offset-Bit, 8 Index-Bit, Rest ($32-14=18$) Tag.
+\end{bsp}
+
+\SW{Zugriffsablauf} Index \ra Zeile ansteuern $\;\;$ Tag vergleichen
+\emph{und} Valid prüfen $\;\;$ beides ok $=$ \T{Hit}, mit Offset das Wort
+herausgreifen $\;\;$ sonst \T{Miss}: Line laden, Tag eintragen, Valid setzen.
+
+\subsection{Mapping-Arten}
+\begin{ztab}{@{}lXl@{}}
+Art & Prinzip & Kosten \\ \midrule
+Direct mapped & Index erzwingt genau \emph{eine} Line & 1 Komparator \\
+Voll assoziativ & jeder Block in jede Line, kein Index & alle Tags, CAM \\
+$n$-way set-ass. & Index wählt Set, $n$ freie Plätze darin & $n$ Komparatoren \\
+\end{ztab}
+\SW{CAM} Voll assoziativ braucht Content Addressable Memory: pro Bit
+SRAM-Zelle (6\,T) $+$ EXOR-Komparator, Ausgänge auf ein Wired-NOR.
+Schnellstmöglicher Vergleich, aber sehr teuer in Fläche und Strom
+\ra heute nur noch für Kleinststrukturen (Micro-TLB).
+
+\begin{falle}[Cache Trashing (nur Direct mapped)]
+\label{bsp:trash}
+Zwei aktive Codestellen mit \emph{gleichem Index}, aber verschiedenem Tag
+werfen sich gegenseitig hinaus. Hit Rate $\to0$, der Cache bleibt zu
+7/8 leer.\\
+\T{Konstruieren:} Abstand $=k\cdot\frac{\text{Cachegrösse}}{\text{Assoziativität}}$.
+Direct mapped, 8\,kB, 64\,B Lines \ra Index $=$ A12:A6; die Adressen
+\R{0x0000} und \R{0x2000} kollidieren. Abhilfe: Assoziativität erhöhen.
+\end{falle}
+
+\subsection{Verwaltungsbits}
+\begin{description}
+\item[Valid] Nach Reset steht Müll im Cache, der zufällig Tag $0$ haben
+  kann. „Unbenutzt“ $\neq$ „Tag $=0$“. Reset setzt Valid auf 0.
+\item[Dirty] (nur D-Cache) Cache ist neuer als RAM. Nur dirty Lines müssen
+  beim Verdrängen zurückgeschrieben werden.
+\end{description}
+
+\subsection{Replacement}
+\begin{ztab}{@{}lX@{}}
+FIFO & ältester Eintrag; ignoriert aktuelle Nutzung \\
+LRU & am längsten nicht \emph{benutzt}; braucht Ordnungsinfo bei jedem Zugriff, ab 16-way teuer \\
+Random & gratis, erstaunlich gut, \emph{immun} gegen pathologische Muster \\
+NMRU & Random, aber die zuletzt benutzte Line ausgenommen \\
+\end{ztab}
+LRU und FIFO kann man mit einer ungünstigen Schleife gezielt zum Versagen
+bringen, Random nicht.
+
+\subsection{Write-Through vs.\ Write-Back}
+\begin{ztab}{@{}lXX@{}}
+ & Write-Through & Write-Back \\ \midrule
+RAM & immer aktuell & zeitweise veraltet \\
+Bandbreite & hoch (jeder Write) & minimal (nur Verdrängen) \\
+Multicore/DMA & unproblematisch & braucht Kohärenzprotokoll \\
+\end{ztab}
+Schleife, die eine Variable 1000$\times$ hochzählt: Write-Through 1000
+RAM-Zugriffe, Write-Back genau einer.
+
+\subsection{Harvard}
+Getrennte I- und D-Caches, damit Befehlsholen und Datenzugriff pro Cycle
+\emph{parallel} laufen (sonst Stall). Der I-Cache braucht kein Dirty-Bit
+und keine Write-Logik. Trennung nur auf L1, ab L2 \T{unified}
+$=$ modifizierte Harvard-Architektur.
+
+\subsection{Mittlere Zugriffszeit}
+\begin{formel}[AMAT -- Average Memory Access Time]
+\label{form:amat}
+\[\text{AMAT}=t_{\text{Hit}}+\text{MissRate}\times\text{MissPenalty}\]
+Mehrstufig von innen nach aussen verschachteln.
+\end{formel}
+
+\begin{bsp}[Beispiel: Pi 5, Hitraten 95/80/50\,\%]
+\[4+0.05\,\bigl(11+0.20\,(35+0.50\cdot100)\bigr)=5.4\ \text{Cycles}\]
+gegenüber 100 Cycles ohne Cache. Die Kurve kippt brutal, sobald L1 von
+95 auf 90\,\% fällt.
+\end{bsp}

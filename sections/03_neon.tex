@@ -1,0 +1,188 @@
+% !TEX root = ../main.tex
+% ---------------------------------------------------------------------
+%  P2 -- SIMD mit ARM NEON
+% ---------------------------------------------------------------------
+\vlsec{cP2}{P2}{SIMD: ARM NEON}
+\label{sec:neon}
+
+\SW{Motivation} Colour adjust, 1600$\times$1200 $\approx$ 2\,Mpixel,
+3 Additionen pro Pixel:
+\begin{ztab}{@{}Xr@{}}
+Variante & Instr./Pixel \\ \midrule
+naiv: 3 ADD $+$ LD $+$ ST $+$ DEC $+$ BR & $\geq7$ \\
+$+$ Load/Store-Multiple, Unrolling 8 (DEC$+$BR geteilt) & $\geq5.25$ \\
+$+$ SIMD 8 & $\geq3.25$ \\
+\end{ztab}
+Rechnung zu 5.25: pro 8 Pixel $24+8+8+1+1=42$ Instruktionen.
+Nach SIMD bleiben im Wesentlichen \emph{Load und Store} übrig
+\ra \T{Bottleneck RAM}. 6\,MB Bilddaten passen nicht in 2\,MB L3:
+$\sim$95\,000 Misses $\times$ 100 Cycles obendrauf.
+
+\subsection{Lanes}
+128-Bit-Register, je nach Befehlssuffix geteilt in
+$16\times8$ / $8\times16$ / $4\times32$ / $2\times64$ Bit.
+\T{Lane 0 $=$ LSBs}, ganz rechts.
+Hardware: Carry-Kette an den Lane-Grenzen auftrennen -- fast gratis,
+deshalb ist SIMD so attraktiv.
+
+\begin{formel}[Merksatz]
+Der Speedup skaliert mit der Lane-Zahl \ra immer den \emph{kleinsten
+ausreichenden} Datentyp wählen. 8\,Bit gibt 16 Lanes, 32\,Bit nur 4.
+Darum INT8 in Bildverarbeitung und KI.
+\end{formel}
+
+\subsection{Registerfile}
+\SW{ARMv7} $16\times$\T{Q} (128\,Bit), $32\times$\T{D} (64),
+$32\times$\T{S} (32, VFP, teilt sich Q0--Q7 / D0--D15).
+Alle auf denselben Flip-Flops -- \emph{wie eine C-Union}.
+\SW{AArch64} (Pi 4/5 mit 64-Bit-OS) $32\times$\T{V}, 128\,Bit, kein
+Paar-Aliasing, Syntax \R{ADD V0.4S,V1.4S,V2.4S}.
+
+\begin{falle}[Zwei Fallen beim Registerfile]
+1.~Schreiben in \R{D3} zerstört die obere Hälfte von \R{Q1}.\\
+2.~NEON hat ein \emph{eigenes} Registerfile und eine eigene Pipeline
+\ra Transfers ARM\,$\leftrightarrow$\,NEON kosten viele Cycles. Code, der
+ständig hin- und herspringt, ist \emph{langsamer} als reiner Skalarcode.
+\end{falle}
+
+\subsection{Datentypen}
+\begin{ztab}{@{}lXX@{}}
+ & 8/16/32/64 & Bemerkung \\ \midrule
+U / S & \R{U8}\dots\R{S64} & unsigned / signed \\
+I & \R{I8}\dots\R{I64} & vorzeichen\emph{un}abhängig \\
+F & \R{F16}, \R{F32} & \T{kein F64} in NEON! \\
+P & \R{P8}, \R{P16} & Polynom über GF(2), carry-less \\
+\end{ztab}
+\SW{Warum „I“} Addition ist bitweise identisch für signed/unsigned
+\ra \R{VADD.I16}. Sättigung ist es \emph{nicht}
+\ra nur \R{VQADD.S16}/\R{.U16}. Die Existenz von „I“ verrät also, dass der
+Befehl vorzeichenunabhängig ist.
+\SW{P} für CRC, AES-GCM, Reed-Solomon (XOR statt Addition, kein Übertrag).
+\SW{Float} NEON-Floats sind auf ARMv7 nicht voll IEEE-754 (flush-to-zero)
+\ra GCC vektorisiert Float-Schleifen nur mit \R{-ffast-math}.
+
+\subsection{Befehlssyntax dekodieren}
+\begin{formel}[Aufbau jedes NEON-Befehls]
+\label{rez:neondecode}
+\begin{center}\ttfamily\small
+V\{mod\}op\{shape\}\{cond\}.\{dt\}\ dest,\ src1,\ src2
+\end{center}
+\begin{tabularx}{\linewidth}{@{}clX@{}}
+\multicolumn{3}{@{}l}{\T{mod}}\\
+Q & saturating & klemmt statt umzuwickeln ($250{+}10=255$) \\
+H & halving & $(a{+}b)/2$ ohne Überlauf \\
+D & doubling & Q15-Festkomma: 1 Bit nach links \\
+R & rounding & statt abschneiden, vermeidet Bias \\[2pt]
+\multicolumn{3}{@{}l}{\T{shape} (Ziel $\neq$ Quellformat)}\\
+-- & & D,\,D \ra D \\
+L & long & D,\,D \ra Q \\
+W & wide & Q,\,D \ra Q \\
+N & narrow & Q,\,Q \ra D \\
+\end{tabularx}
+\end{formel}
+
+\begin{bsp}[Beispiel: \R{VQRDMULH.S16 Q0,Q1,Q2}]
+V$|$\,Q\,R\,D\,$|$MULH$|$.S16\\
+$=$ Saturating $+$ Rounding $+$ Doubling Multiply, High half,
+8 Lanes à 16\,Bit signed. Der Arbeitsbefehl jedes FIR-Filters --
+gelesen, ohne ihn zu kennen.
+\end{bsp}
+
+\SW{Standardmuster} 8\,Bit laden \ra mit \T{L} auf 16\,Bit erweitern
+\ra in 16\,Bit rechnen \ra mit \T{N} und Sättigung zurück auf 8\,Bit.
+
+\subsection{Befehlsklassen}
+\begin{description}
+\item[Load/Store] \R{VLDn}/\R{VSTn} ($n{=}1..4$) laden
+  \emph{de-interleaved}: \R{VLD3.8} liest 24\,B und sortiert R/G/B in drei
+  Register. \emph{Ohne das wäre NEON für Bildverarbeitung nutzlos.}
+  Dazu \R{VLDM/VSTM}, \R{VLDR/VSTR}, \R{VPUSH/VPOP}.
+\item[Data Processing] \R{VDUP} (Skalar in alle Lanes),
+  \R{VMOV} (Immediate), \R{VZIP/VUZP}, \R{VTRN} ($4{\times}4$
+  transponieren), \R{VTBL/VTBX} (beliebige Permutation),
+  \R{VEXT} (gleitendes Fenster über zwei Register),
+  \R{VCVT} (auch Fixed-Point), \R{VREV16}.
+\item[Shift] Es gibt \emph{keine} SIMD-Division, darum sind Shifts
+  zentral: \R{VSHL/VSHR}, \R{VSRA} (shift $+$ accumulate),
+  \R{VSHLL}, \R{VQRSHRN} (Sat$+$Round$+$Shift$+$Narrow -- der
+  Standard-Abschlussbefehl), \R{VSLI/VSRI} (Bitfelder packen).
+\item[Logical/Compare] Prädikation statt Branch:
+  \R{VCEQ/VCGE/VCGT} liefern eine \emph{Maske} (alle 1 / alle 0),
+  \R{VBSL} (Bit Select) wählt bitweise \ra das \R{?:} der Vektorwelt.
+  Preis: beide Zweige werden gerechnet.
+\item[Arithmetik] \R{VABD/VABA} (SAD -- Bewegungsschätzung im Videocodec),
+  \R{VMAX/VMIN}, \R{VPADD/VPMAX} (\emph{pairwise} $=$ benachbarte Lanes),
+  \R{VCLZ/VCNT}, \R{VRECPE/VRECPS} und \R{VRSQRTE/VRSQRTS}
+  (Newton-Raphson statt Division/Wurzel).
+\item[Multiply] \R{VMLA/VMLS} (MAC -- Grundoperation von FIR,
+  Skalarprodukt, Faltung, Matrixmultiplikation), \R{VFMA}
+  (\emph{fused}: nur eine Rundung, numerisch genauer),
+  „by scalar“-Varianten, \R{VQDMULH} (Q15).
+\end{description}
+
+\subsection{Intrinsics}
+\begin{ztab}{@{}lX@{}}
+\R{v<op>q\_<dt>} & \R{q} $=$ Quadword (128\,Bit), ohne \R{q} $=$ 64 \\
+\R{<typ><br>x<anz>\_t} & \R{uint8x16\_t}, \R{float32x4\_t} \\
+\R{...x<länge>\_t} & \R{uint8x8x3\_t} $=$ 3 Register (für \R{VLD3}) \\
+\end{ztab}
+Header \R{<arm\_neon.h>}. Registerzuteilung und Scheduling macht weiterhin
+der Compiler.
+
+\SW{Matrixmultiplikation $4\times4$} Daten \T{column-major}
+(\R{C[4*j+i]}). Nicht Skalarprodukt Zeile$\times$Spalte (bräuchte
+horizontale Summen), sondern jede Spalte von C als \T{Linearkombination
+der Spalten von A}: \R{C0 += A0*B0[0] + A1*B0[1] + \dots} über
+\R{vfmaq\_laneq\_f32}. \ra Alle 4 Lanes arbeiten durchgehend, \emph{keine}
+horizontale Operation, keine Transposition. 12 von 16 Q-Registern belegt --
+Registerdruck ist die harte Grenze ($8\times8$ ginge nicht mehr).
+
+\SW{MAC-/FIR-Filter} In der Schleife nur \emph{vertikal} rechnen
+(\R{vmla.f32 q0,q1,q2} lane-weise; \R{!} $=$ Post-Increment spart die
+Adressrechnung). Am \emph{Ende} einmal horizontal reduzieren:
+\R{vpadd} in $\log_2 n$ Schritten
+$[a,b],[c,d]\to[a{+}b,\,c{+}d]\to$ Gesamtsumme.
+
+\begin{falle}[Horizontal nie in der Schleife]
+Pairwise/horizontale Operationen brechen die Lane-Isolation und sind
+langsam. Ein Akkumulator \emph{pro Lane}, Reduktion genau einmal am Schluss.
+\end{falle}
+
+\subsection{Grenzen}
+\label{sec:simdgrenzen}
+\begin{formel}[Amdahl für SIMD]
+\label{form:amdahl}
+\[S=\frac{1}{(1-p)+p/s}\qquad p=\text{vektorisierbar},\ s=\text{Lanes}\]
+$p{=}0.8,\ s{=}4\Rightarrow2.5\times$; $s{=}16\Rightarrow$ nur $4\times$.
+Die 20\,\% Skalarcode deckeln alles.
+\end{formel}
+
+\begin{description}
+\item[Memory bound] \R{c[i]=a[i]+b[i]}: 1 Rechenoperation auf 3
+  Speicherzugriffe. \emph{Zuerst} Datenlayout und Cache-Lokalität,
+  \emph{dann} SIMD.
+\item[Hindernisse] loop-carried dependency (\R{a[i]=a[i-1]+b[i]});
+  Pointer-Aliasing \ra \R{restrict}; Kontrollfluss \ra Masken;
+  Float-Assoziativität \ra \R{-ffast-math}.
+\item[Tail] 1003 Elemente bei 4 Lanes $=$ 250 Vektoriterationen $+$ 3
+  skalar. SIMD lohnt erst ab einigen Dutzend Elementen.
+\item[Alignment] unit stride ist Pflicht; Gather zerstört die Effizienz,
+  weil jede Lane eine eigene Cache Line anfasst.
+\end{description}
+
+\subsection{NEON einschalten (bare metal)}
+Nach Reset aus -- wegen Strom (clock gating) und lazy Context Switch des OS.
+\T{Zwei} Schalter nötig:
+\begin{lstlisting}
+MRC p15,0,r0,c1,c0,2   ; CPACR lesen
+ORR r0,r0,#0x00f00000  ; cp10+cp11 full access
+MCR p15,0,r0,c1,c0,2   ; CPACR schreiben
+ISB                    ; Pipeline neu holen!
+MOV r0,#0x40000000     ; Bit30 = EN
+VMSR FPEXC,r0          ; Einheit selbst einschalten
+\end{lstlisting}
+CPACR ist die Tür des ARM-Kerns zum Coprozessor-Interface,
+\R{FPEXC.EN} der Hauptschalter der Einheit. Ohne \R{ISB} ist das
+Verhalten undefiniert.
+\SW{Flags} \R{armcc -O3 -Otime --vectorize} (veraltet) bzw.
+\R{gcc -O3 -ftree-vectorize}; Diagnose \R{-fopt-info-vec-missed}.

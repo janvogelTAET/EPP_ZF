@@ -1,0 +1,108 @@
+% !TEX root = ../main.tex
+% ---------------------------------------------------------------------
+%  P4 -- RISC-V ISA
+% ---------------------------------------------------------------------
+\vlsec{cP4}{P4}{RISC-V ISA}
+\label{sec:riscv}
+
+\SW{RISC-Philosophie} (Patterson, 1980): alle Befehle gleich gross; ein
+Befehl pro Takt; Load/Store-Architektur; Harvard; viele
+Mehrzweckregister; kleiner einfacher Kern \ra Platz für grosse Caches.
+
+\SW{RISC-V} Offene, lizenz- und gebührenfreie ISA. UC Berkeley, erste
+öffentliche Spezifikation 2011, Foundation seit 2019 in der Schweiz
+(Sorge vor Exportbeschränkungen).
+\begin{itemize}
+\item \T{modular}: Basis \R{RV32I} mit $<$50 Befehlen
+      (x86 startete 1978 mit 80 und hatte 2015 1338)
+\item Erweiterungen \R{C} compressed, \R{M} mult/div, \R{A} atomics,
+      \R{F/D/Q} float, \R{V} Vektor
+\item Basis und Standard-Erweiterungen sind \emph{frozen}; viel freier
+      Opcode-Raum für eigene Erweiterungen
+\end{itemize}
+
+\subsection{Registerfile}
+31 Mehrzweckregister à 32\,Bit $+$ \R{x0} \T{hardwired 0}.
+\R{x1 ra}, \R{x2 sp}, \R{x3 gp}, \R{x4 tp}, \R{t0--t6} (temporär),
+\R{s0--s11} (saved), \R{a0--a7} (Argumente/Rückgabe).
+\begin{falle}[Konvention, nicht Hardware]
+Die Registerfunktionen sind \emph{reine Konvention} -- es gibt z.\,B.\
+keine 32-Bit-Maschinenbefehle für Stackoperationen. Der \R{PC} liegt
+\emph{ausserhalb} des Registerfiles.
+\end{falle}
+\SW{Gegenüber ARM} 13 Mehrzweckregister, \R{PC}/\R{SP}/\R{LR} \emph{im}
+Registerfile, Barrel Shifter vor der ALU.
+
+\subsection{RV32I: 47 Befehle}
+\begin{itemize}
+\item feste Breite 32\,Bit (Bit[1:0] $=$ „11“) $+$ 2 illegale
+      (alles 0, alles 1)
+\item drei 5-Bit-Registeradressen an \emph{festen} Positionen
+      \ra Registerlesen läuft parallel zum Decodieren
+\item Immediates sind \emph{immer} vorzeichenerweitert
+\end{itemize}
+\begin{ztab}{@{}lX@{}}
+R & Register-Register \\
+I / U & short-lower / long-upper Immediate; I$+$U ergeben eine
+  32-Bit-Konstante in jedem Register, auch im PC \\
+S & Store, Subtyp \T{B} $=$ bedingte Branches \\
+J & unbedingte Jumps \\
+\end{ztab}
+
+\subsection{Keine ALU-Flags}
+\label{sec:rvflags}
+\begin{falle}[Es gibt kein C, O, N, Z]
+Statt eines Carry-Flags vergleicht \R{SLTU} (set less than, unsigned)
+zwei Register. Eine 64-Bit-Addition braucht darum Zusatzbefehle:
+\begin{lstlisting}
+add  a0,a2,a4   # Summe low
+sltu a2,a0,a2   # Carry: (a0<a2) ? 1 : 0
+add  a5,a3,a5   # Summe high
+add  a1,a2,a5   # Carry addieren
+\end{lstlisting}
+\end{falle}
+\R{CSR} (Control/Status) sind 64-Bit-Zähler für Systemticks, ausgeführte
+Befehle und produktive Taktzyklen.
+
+\subsection{RV32C -- Compressed}
+34 Befehle à 16\,Bit, jeder bildet auf \emph{genau einen} 32-Bit-Befehl ab
+\ra Programmierer und Compiler müssen nichts davon wissen;
+32-Bit-Befehle dürfen 16-Bit-aligned liegen.
+\begin{itemize}
+\item 50--60\,\% der Befehle sind komprimierbar
+      \ra \T{25--30\,\% kleinerer Code}
+\item Der 16-Bit-Decoder kostet nur $\sim$400--700 Gatter
+      ($\sim$2\,\% eines kleinen Kerns)
+\end{itemize}
+\begin{bsp}[Benchmark insertion sort]
+RV32I 76\,B $\;\;$ RV32I$+$C 52\,B (68\,\%) $\;\;$ ARM-Thumb-2 46\,B (60\,\%).
+Die gute Dichte von RV32C kommt vor allem vom \emph{grossen Registerfile}
+-- es muss kaum kopiert werden.
+\end{bsp}
+
+\subsection{ARM vs.\ RISC-V}
+\begin{ztab}{@{}XX@{}}
+ARM $+$ & RISC-V $+$ \\ \midrule
+Industriestandard & offene ISA \\
+dichter Maschinencode & einfaches HW-Design \\
+grosse Tool- und IP-Basis & kleine Fläche \\
+Barrel Shifter vor ALU & grosses Registerfile (31) \\
+PC im Registerfile & erweiterbar \\
+viele Adressmodi & keine Royalties \\
+viele Sleep-Modi & \\ \midrule
+ARM $-$ & RISC-V $-$ \\ \midrule
+teuer (Royalties) & HW schwer zu kompilieren \\
+grosse Fläche, komplex & schlechtere Codedichte \\
+patentgeschützt & keine Flags \ra mehr Befehle \\
+\end{ztab}
+
+\subsection{RP2350 / Hazard3}
+\R{RV32IMAC} $+$ \R{Zba} (Adressgenerierung),
+\R{Zbb/Zbs/Zbkb} (Bitmanipulation, Krypto),
+\R{Zcb/Zcmp} (weitere compressed, push/pop), \R{Zicsr}.
+Debug-/Machine-/User-Modus; PMP mit 8 Regionen, 32-B-Granularität;
+\R{Xh3power} (Power-Management), \R{Xh3irq} (verschachtelte,
+priorisierte IRQs).
+RV32C: alle 16-Bit-Befehle 1 Takt (ausser Traps, IRQs, push/pop).
+Ein Sprung auf einen nicht 32-bit-ausgerichteten 32-Bit-Befehl kostet
+einen Takt extra (zwei Buszyklen zum Holen).

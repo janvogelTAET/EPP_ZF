@@ -1,0 +1,40 @@
+% !TEX root = ../main.tex
+% ---------------------------------------------------------------------
+%  Navigation: Farblegende + "Wenn die Aufgabe lautet ..."
+%  Steht auf der Titelseite, vor dem Inhaltsverzeichnis.
+% ---------------------------------------------------------------------
+
+\begin{tcolorbox}[zfbox, colback=black!2, colframe=black!45,
+  coltitle=white, colbacktitle=black!45, title={Farbcode der Blöcke}]
+\textcolor{cP1}{\rule{7pt}{7pt}}~\T{P1} Cache/MMU \quad
+\textcolor{cP2}{\rule{7pt}{7pt}}~\T{P2} SIMD \quad
+\textcolor{cP3}{\rule{7pt}{7pt}}~\T{P3} DMA \\
+\textcolor{cP4}{\rule{7pt}{7pt}}~\T{P4} RISC-V \quad
+\textcolor{cP5}{\rule{7pt}{7pt}}~\T{P5} Multicore \quad
+\textcolor{cP6}{\rule{7pt}{7pt}}~\T{P6} Rekonf.\ HW \\[3pt]
+\textcolor{cREF}{\rule{7pt}{7pt}}\,Formel \;
+\textcolor{red!65}{\rule{7pt}{7pt}}\,Falle \;
+\textcolor{green!40!black}{\rule{7pt}{7pt}}\,Rezept \;
+\textcolor{black!55}{\rule{7pt}{7pt}}\,Beispiel \\[3pt]
+Abschnitt~11 ist ein Stichwortregister: Begriff \ra Abschnittsnummer.
+\end{tcolorbox}
+
+\begin{tcolorbox}[zfbox, colback=black!2, colframe=black!45,
+  coltitle=white, colbacktitle=black!45, title={Wenn die Aufgabe lautet \dots}]
+\begin{tabularx}{\linewidth}{@{}Xr@{}}
+Adresse in Tag/Index/Offset zerlegen & \ref{rez:zerlegung} \\
+Mittlere Zugriffszeit (AMAT) rechnen & \ref{form:amat} \\
+Trashing-Szenario konstruieren & \ref{bsp:trash} \\
+Page-Table-Grösse 1- vs.\ 2-stufig & \ref{sec:mmu} \\
+NEON-Befehl dekodieren & \ref{rez:neondecode} \\
+Speedup aus Lanes oder Kernen & \ref{form:amdahl} \\
+Warum ist diese Schleife nicht vektorisierbar & \ref{sec:simdgrenzen} \\
+PL330-\R{CCR} dekodieren, Bytes zählen & \ref{rez:ccr} \\
+\R{TI}-Register / \R{SRC\_INC} setzen & \ref{rez:ti} \\
+Bandbreite aus Takt und Busbreite & \ref{form:bw} \\
+Warum darf DMA keine virtuelle Adresse & \ref{falle:dma} \\
+RISC-V: Addition mit Carry ohne Flags & \ref{sec:rvflags} \\
+Race Condition / Mutex / Prio-Inversion & \ref{sec:kohaerenz} \\
+CGRA-Latenz und PE-Auslastung & \ref{sec:cgra} \\
+\end{tabularx}
+\end{tcolorbox}

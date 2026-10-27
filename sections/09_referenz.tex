@@ -1,0 +1,70 @@
+% !TEX root = ../main.tex
+% ---------------------------------------------------------------------
+%  Referenz: Formeln, Rezepte, durchgerechnete Beispiele
+% ---------------------------------------------------------------------
+\vlsec{cREF}{REF}{Formeln \& durchgerechnete Beispiele}
+\label{sec:referenz}
+
+\subsection{Alle Formeln auf einen Blick}
+\begin{ztab}{@{}lX@{}}
+Adresszerlegung & $\#\text{Sets}=\frac{\text{Cache}}{\text{Line}\cdot\text{Assoz.}}$,
+  Offset $=\log_2(\text{Line})$, Index $=\log_2(\#\text{Sets})$ \\
+AMAT & $t_{\text{Hit}}+\text{MissRate}\cdot\text{MissPenalty}$ \\
+Amdahl & $S=\dfrac{1}{(1-p)+p/s}$ \quad ($s$: Lanes \emph{oder} Kerne) \\
+Bandbreite & Takt $\times$ Busbreite in Byte \\
+Trashing-Abstand & $k\cdot\frac{\text{Cachegrösse}}{\text{Assoziativität}}$ \\
+Page Table 1-stufig & $2^{\text{VPN-Bits}}\times$ Eintragsgrösse \\
+PL330-Burst & $n_{\text{Beats}}\times m_{\text{Bit}}/8$ Byte je \R{DMALD} \\
+CGRA-Latenz & Summe der Stufen entlang des Datenpfads \\
+\end{ztab}
+
+\subsection{Durchgerechnete Beispiele}
+\begin{bsp}[Sieben Rechnungen, wie sie in der Prüfung drankommen]
+\T{(a) Adresszerlegung.} 32\,kB Cache, 32\,B Lines, 8-way, 32-Bit-Adresse.
+$\#\text{Sets}=\frac{32768}{32\cdot8}=128$ \ra Offset $=\log_232=5$\,Bit
+(A4:A0), Index $=\log_2128=7$\,Bit (A11:A5), Tag $=32-7-5=\T{20\,Bit}$.
+
+\T{(b) Trashing konstruieren.} Direct mapped, 8\,kB, 64\,B Lines
+\ra 128 Lines, Index $=$ A12:A6. Kollision, wenn der Abstand ein
+Vielfaches der Cachegrösse ist: \R{0x0000} und \R{0x2000} -- gleicher
+Index, verschiedene Tags.
+
+\T{(c) AMAT zweistufig.} $t_{L1}=4$, MissRate$_{L1}=10\,\%$, $t_{L2}=12$,
+MissRate$_{L2}=25\,\%$, RAM $=120$:
+$4+0.1\,(12+0.25\cdot120)=\T{8.2 Cycles}$.
+
+\T{(d) Amdahl mit Datentypwahl.} 90\,\% vektorisierbar.
+\R{float} (4 Lanes): $1/(0.1+0.9/4)=\T{3.08}\times$;
+\R{uint8} (16 Lanes): $1/(0.1+0.9/16)=\T{6.4}\times$.
+\ra Die Datentypwahl verdoppelt den Speedup, der Code bleibt gleich.
+
+\T{(e) PL330-CCR.} \R{SB8 SS32 DB4 DS64} mit \R{DMALP 32}: Quelle
+$8\cdot32/8=32$\,B, Ziel $4\cdot64/8=32$\,B -- passt. Gesamt
+$32\cdot32=\T{1024\,B}$. Schleifenkörper 4 Instruktionen \ra passt in
+eine I-Cache-Line.
+
+\T{(f) \R{TI} für UART-TX} (mem\,\ra\,Peripherie, 32\,Bit):
+\R{SRC\_INC}$=1$, \R{DEST\_INC}$=\mathbf{0}$, \R{DEST\_DREQ}$=1$,
+\R{SRC\_DREQ}$=0$, \R{PERMAP}$=$ UART-Nr., \R{WIDTH}$=32$, \R{INTEN}$=1$.
+
+\T{(g) Zynq-DMA-Bandbreite.} CPU\_6x $=$ 800\,MHz, 1:3 \ra CPU\_2x $=$
+266\,MHz, Interconnect 64\,Bit $=$ 8\,B: $266\cdot8=\T{2.13\,GB/s}$
+(Slave-Interconnect 32\,Bit: $\sim$1.07\,GB/s).
+\end{bsp}
+
+\subsection{Die vier durchgehenden Muster}
+\begin{description}
+\item[Overhead amortisieren] Cache Line, AXI-Burst, SIMD-Lane, Loop
+  Unrolling -- viermal dasselbe Argument: eine feste Startgebühr auf
+  möglichst viele Nutzdaten verteilen.
+\item[Kleiner schneller Speicher vor grossem langsamem] L1/RAM,
+  TLB/Page Table, PL330-I-Cache -- immer dieselbe Struktur (Tag, Valid,
+  Miss, Replacement), nur die Zeitskalen verschieben sich um Faktor 1000.
+\item[Prädikation statt Verzweigung] NEON-Masken (räumlich, über Lanes),
+  PL330-\R{B}/\R{S}-Suffixe (zeitlich, über Instruktionen).
+\item[Die Kette] P1 baut die Hierarchie $\;\to\;$ P2 macht die CPU
+  schneller und verschärft damit das Speicherproblem $\;\to\;$ P3 nimmt
+  der CPU das Datenschaufeln ab $\;\to\;$ P4 vereinfacht den Kern
+  $\;\to\;$ P5 vervielfacht ihn und zahlt mit Kohärenz $\;\to\;$ P6
+  verlagert die Arbeit ganz aus der CPU heraus.
+\end{description}

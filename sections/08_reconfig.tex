@@ -1,0 +1,101 @@
+% !TEX root = ../main.tex
+% ---------------------------------------------------------------------
+%  P6 -- Rekonfigurierbare Hardware
+% ---------------------------------------------------------------------
+\vlsec{cP6}{P6}{Rekonfigurierbare Hardware}
+\label{sec:reconfig}
+
+\SW{Spektrum} fein\,\ra\,grob, schnell\,\ra\,flexibel:
+\begin{ztab}{@{}lXl@{}}
+Ebene & Baustein & Eigenschaft \\ \midrule
+Gatter & \T{FPGA} & sehr feingranular \\
+Sequencer & progr.\ FSM & kaum progr., sehr schnell \\
+ & Controller & winziger Befehlssatz (Load, Store, Add,
+   Jump, Compare), flexibel, langsam \\
+ & \T{PIO} & flexibel \emph{und} schnell \\
+ & kleine CPU $+$ RAM & sehr flexibel, sehr langsam \\
+Operation & \T{CGRA} & routbare ALU/FPU-Blöcke, Datenpfad, VLIW \\
+\end{ztab}
+
+\subsection{FPGA}
+\begin{itemize}
+\item \T{LUT} (Look Up Table) realisiert \emph{jede} Logikfunktion ihrer
+      Eingänge; im Beispiel 3, real 4--8
+\item Konfigurationsspeicher $=$ SRAM-Zellen in Schieberegister-Anordnung
+      (Wiederverwendung der Scan-Test-Struktur)
+\item Switch-Matrix-Routing mit Sechs-Transistor-Kreuzungen
+\item konfiguriert in VHDL
+\end{itemize}
+\begin{formel}[Die Zahl, die man sich merkt]
+\T{Routing-Delay $>$70\,\% des Gesamt-Delays.} Nicht die Logik ist
+langsam, sondern die Verdrahtung.
+\end{formel}
+
+\subsection{CGRA}
+Array aus \T{PE} (Processing Elements) mit \T{FU} (spezialisierte
+ALU/FPU: AND, SHL, ADD, MUL, MAC), typisch extremes \T{VLIW}.
+
+\begin{bsp}[4-Tap-FIR auf $4\times4$-CGRA]
+\label{sec:cgra}
+$y[n]=h_0x[n]+h_1x[n{-}1]+h_2x[n{-}2]+h_3x[n{-}3]$,
+Nearest-Neighbor-Mesh, 1-Takt-ADD/MUL.
+\[m_k=h_k\,x[n{-}k],\quad a_0=m_0{+}m_1,\ a_1=m_2{+}m_3,\ y=a_0{+}a_1\]
+\T{7 von 16 PE} benutzt $\;\;$ \T{1 Ergebnis pro Takt} (Pipeline)
+$\;\;$ Latenz $=1_{\text{MUL}}+2_{\text{ADD}}=\T{3 Takte}$.
+\end{bsp}
+
+\SW{Xilinx AI Engines} Kachel aus Vektorprozessor (SIMD für parallele
+Arithmetik) $+$ Skalarprozessor (Kontrollfluss, Adressen) $+$ lokalem
+deterministischem Speicher $+$ DMA-Engines, verbunden über streaming-
+und memory-mapped Interconnect.
+
+\subsection{RP2350 PIO}
+3 identische PIO-Blöcke, je \T{4 State Machines}. Realisiert in Software
+Schnittstellen wie I2C, 3-pin I2S, SDIO, SPI/DSPI/QSPI, UART, DPI,
+8080/6800-Parallelbus, VGA (Widerstands-DAC).
+\begin{ztab}{@{}lX@{}}
+Register je SM & $2\times32$\,Bit Shift (\T{OSR}, \T{ISR}),
+  $2\times32$\,Bit Scratch (\T{X}, \T{Y}) \\
+FIFO & $4\times32$\,Bit je TX und RX \\
+Instruktionsspeicher & 32 Worte, gemeinsam für die 4 SM \\
+Takt & fraktionaler Teiler (16 Integer-, 8 Nachkommabits) \\
+Rest & flexibles GPIO-Mapping, DMA-Interface, IRQ-Flags \\
+\end{ztab}
+
+\begin{formel}[Nur 9 Befehle]
+\R{JMP} \R{WAIT} \R{IN} \R{OUT} \R{PUSH} \R{PULL} \R{MOV} \R{IRQ}
+\R{SET}. \R{NOP} ist eine Pseudo-Instruktion ($=$ \R{mov y,y}).\\
+Format: \R{<instr> (side <wert>) ([<delay>])}, Delay 0--31 Takte
+(weniger, wenn \R{.side\_set} benutzt wird).\\
+JMP-Bedingungen: immer, \R{!X}, \R{X--}, \R{!Y}, \R{Y--}, \R{X!=Y},
+\R{PIN}, \R{!OSRE}.
+\end{formel}
+
+\SW{Datenfluss} \R{PULL} holt ein Wort aus der TX-FIFO in den \T{OSR},
+\R{OUT} schiebt 1--32\,Bit daraus zum Ziel; \R{IN} schiebt in den
+\T{ISR}, \R{PUSH} schreibt ihn in die RX-FIFO.
+\T{Autopull/Autopush} füllt bzw.\ leert automatisch
+\ra die \R{pull}/\R{push}-Instruktion entfällt.
+
+\SW{Zwei Tricks, die Takte sparen}
+\begin{description}
+\item[Side-Set] schaltet \emph{parallel} zum Befehl Pins um
+  \ra Daten \emph{und} Takt ohne Zusatzbefehl (SPI).
+\item[Program Wrapping] \R{.wrap\_target}/\R{.wrap} ersetzt den \R{jmp}
+  durch einen Rücksprung, der \emph{null} Takte kostet.
+\end{description}
+
+\begin{lstlisting}
+.program squarewave_wrap
+  set pindirs, 1     ; Pin auf Ausgang
+.wrap_target         ; 0-Takt-Ruecksprungziel
+  set pins, 1 [1]    ; high, 1 Takt warten
+  set pins, 0 [1]    ; low,  1 Takt warten
+.wrap                ; 0-Takt-Sprung statt jmp
+\end{lstlisting}
+
+\SW{Direktiven} \R{.program}, \R{.define}, \R{.side\_set <n> (opt)},
+\R{.in}/\R{.out <n> (left|right) (auto) (<schwelle>)},
+\R{.fifo}, \R{.clock\_div}, \R{.mov\_status},
+\R{.wrap\_target}/\R{.wrap}, \R{.origin}, \R{.pio\_version}
+(1 $=$ RP2350, 0 $=$ RP2040), \R{.word}.

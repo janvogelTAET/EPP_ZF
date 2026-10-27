@@ -1,0 +1,83 @@
+# =====================================================================
+#  .gitignore -- LaTeX-Zusammenfassung
+#  Ins Repo gehoeren nur die Quellen: *.tex, figures/, README, Skripte.
+#  Alles andere wird beim Bauen erzeugt oder ist lokale Werkzeug-Config.
+# =====================================================================
+
+# ---- Ausgabe --------------------------------------------------------
+# Das gebaute PDF gehoert nicht ins Repo (wird aus main.tex erzeugt).
+*.pdf
+# Ausnahme: PDF-Grafiken, die als Quelle eingebunden werden.
+!figures/*.pdf
+!figures/**/*.pdf
+
+*.dvi
+*.xdv
+*.ps
+
+# ---- LaTeX Hilfsdateien ---------------------------------------------
+*.aux
+*.log
+*.out
+*.toc
+*.lof
+*.lot
+*.lol
+*.loa
+*.fls
+*.fdb_latexmk
+*.synctex
+*.synctex.gz
+*.synctex(busy)
+*.synctex.gz(busy)
+*.auxlock
+*.figlist
+*.makefile
+*.pytxcode
+
+# Literatur
+*.bbl
+*.blg
+*.bcf
+*.brf
+*.run.xml
+
+# Index / Glossar
+*.idx
+*.ilg
+*.ind
+*.ist
+*.acn
+*.acr
+*.alg
+*.glg
+*.glo
+*.gls
+*.glsdefs
+
+# Beamer
+*.nav
+*.snm
+*.vrb
+
+# ---- Editor / Werkzeug-Config (lokal, nicht teilen) -----------------
+.vscode/
+*.code-workspace
+vscode-settings.json
+*.bak
+*.sav
+*.tcp
+*.tps
+*.tmp
+*~
+
+# ---- Python (mkreg.py) ----------------------------------------------
+__pycache__/
+*.py[cod]
+
+# ---- Betriebssystem -------------------------------------------------
+.DS_Store
+Thumbs.db
+ehthumbs.db
+desktop.ini
+$RECYCLE.BIN/

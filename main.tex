@@ -1,0 +1,194 @@
+% =====================================================================
+%  Zusammenfassung EPP Performance (HS26) – LaTeX-Quelle
+%  Kompilieren: pdflatex (2x) oder latexmk -pdf main.tex
+%  In VS Code mit der Extension "LaTeX Workshop": main.tex öffnen,
+%  speichern (Ctrl+S) baut automatisch, Ctrl+Alt+V zeigt das PDF.
+%
+%  Format: A4 hoch, 2 Spalten, 9pt.
+%  Inhalt: eine Datei pro Block in sections/
+% =====================================================================
+\documentclass[8pt]{extarticle}
+
+% ---------------------------------------------------------------------
+% Pakete
+% ---------------------------------------------------------------------
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\IfFileExists{ngerman.ldf}{\usepackage[ngerman]{babel}}{%
+  \renewcommand{\contentsname}{Inhaltsverzeichnis}}
+\usepackage{helvet}
+\renewcommand{\familydefault}{\sfdefault}
+
+\usepackage[a4paper,left=1.0cm,right=1.0cm,top=1.0cm,bottom=1.1cm,
+            footskip=0.5cm]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{multicol}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{tabularx}
+\usepackage{environ}        % damit tabularx in \ztab funktioniert
+\usepackage{enumitem}
+\usepackage[dvipsnames]{xcolor}
+\usepackage{titlesec}
+\usepackage[most]{tcolorbox}
+\usepackage{listings}
+\usepackage{fancyhdr}
+\usepackage{lastpage}
+\usepackage[colorlinks=true,linkcolor=blue!60,urlcolor=blue!60]{hyperref}
+
+\graphicspath{{figures/}}
+
+% ---------------------------------------------------------------------
+% Metadaten (hier anpassen)
+% ---------------------------------------------------------------------
+\newcommand{\doctitle}{Zusammenfassung - EPP Performance}
+\newcommand{\docauthors}{Jan Vogel}
+\newcommand{\docdate}{\today}
+\newcommand{\docversion}{v1.0}
+
+% ---------------------------------------------------------------------
+% Layout: 2 Spalten, Abstände
+% Platz knapp? Zuerst hier an den Rändern drehen, dann an der
+% Schriftgrösse in \documentclass ganz oben.
+% ---------------------------------------------------------------------
+\setlength{\columnsep}{10pt}
+\setlength{\columnseprule}{0.4pt}
+\renewcommand{\columnseprulecolor}{\color{black!30}}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.5pt}
+\setlength{\tabcolsep}{3pt}
+\setcounter{secnumdepth}{2}
+\setcounter{tocdepth}{1}
+
+\setlist[itemize]{nosep,leftmargin=1.1em,topsep=1pt,label=\textcolor{blockacc}{\textbullet}}
+\setlist[enumerate]{nosep,leftmargin=1.5em,topsep=1pt}
+\setlist[description]{nosep,topsep=1pt,leftmargin=0pt,font=\normalfont\bfseries}
+
+\setlength{\jot}{5pt}
+\allowdisplaybreaks
+\AtBeginDocument{%
+  \setlength{\abovedisplayskip}{3pt}\setlength{\belowdisplayskip}{3pt}%
+  \setlength{\abovedisplayshortskip}{3pt}\setlength{\belowdisplayshortskip}{3pt}}
+
+% ---------------------------------------------------------------------
+% Farben: eine pro Vorlesungsblock
+% Beim Durchblättern erkennt man den Block an der Balkenfarbe.
+% ---------------------------------------------------------------------
+\definecolor{cP1}{HTML}{1F4E79}   % Cache / MMU
+\definecolor{cP2}{HTML}{2E7D32}   % SIMD
+\definecolor{cP3}{HTML}{B35C00}   % DMA
+\definecolor{cP4}{HTML}{6A1B9A}   % RISC-V
+\definecolor{cP5}{HTML}{B3261E}   % Multicore
+\definecolor{cP6}{HTML}{00695C}   % Rekonfigurierbare HW
+\definecolor{cREF}{HTML}{37474F}  % Referenzteil
+\colorlet{blockacc}{cREF}         % Akzentfarbe des aktuellen Blocks
+\colorlet{blockbar}{cREF!16}      % Balkenfarbe = helle Variante
+
+% ---------------------------------------------------------------------
+% Überschriften als farbige Balken
+% ---------------------------------------------------------------------
+\titleformat{\section}[block]{\normalfont}{}{0pt}{\sectionbar}
+\titleformat{name=\section,numberless}[block]{\normalfont}{}{0pt}{\sectionbarnonum}
+\titleformat{\subsection}[block]{\normalfont}{}{0pt}{\subsectionbar}
+\newcommand{\sectionbar}[1]{\colorbox{blockbar}{\parbox{\dimexpr\linewidth-2\fboxsep\relax}{\large\strut\textcolor{blockacc}{\textbf{\thesection\ #1}}}}}
+\newcommand{\sectionbarnonum}[1]{\colorbox{blockbar}{\parbox{\dimexpr\linewidth-2\fboxsep\relax}{\large\strut\textcolor{blockacc}{\textbf{#1}}}}}
+\newcommand{\subsectionbar}[1]{{\color{blockacc}\rule{2pt}{8pt}}\hskip3pt{\footnotesize\textbf{\thesubsection\ #1}}}
+
+\titlespacing*{\section}{0pt}{4pt}{1.5pt}
+\titlespacing*{\subsection}{0pt}{4pt}{1pt}
+
+% Blockueberschrift: setzt die Farbe und schreibt den Balken.
+%   \vlsec{Farbe}{Kurzlabel}{Titel}
+\newcommand{\vlsec}[3]{%
+  \colorlet{blockacc}{#1}%
+  \colorlet{blockbar}{#1!16}%
+  \section[{#2 -- #3}]{#3\hfill\normalsize #2}%
+}
+
+% ---------------------------------------------------------------------
+% Kopf-/Fusszeile
+% ---------------------------------------------------------------------
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\footrulewidth}{0.4pt}
+\fancyfoot[L]{\tiny \docauthors\ --- Zusammenfassung --- EPP Performance --- \docversion}
+\fancyfoot[R]{\tiny \thepage/ \pageref{LastPage}}
+
+% ---------------------------------------------------------------------
+% Eigene Umgebungen und Befehle
+% ---------------------------------------------------------------------
+\newcommand{\R}[1]{\texttt{#1}}          % Register / Code / Befehl
+\newcommand{\T}[1]{\textbf{#1}}          % Schluesselbegriff
+\newcommand{\ra}{\,$\rightarrow$\,}
+\newcommand{\SW}[1]{\textcolor{blockacc}{\textbf{#1}}\hskip0.4em}  % Stichwort am Zeilenanfang
+
+% Kompakte Tabelle ueber die Spaltenbreite. Erste Zeile = Kopfzeile.
+%   \begin{ztab}{@{}Xr@{}} Kopf & Kopf \\ \midrule ... \end{ztab}
+% (\NewEnviron statt \newenvironment, sonst findet tabularx sein Ende nicht)
+\NewEnviron{ztab}[1]{%
+  \par\footnotesize
+  \begin{tabularx}{\linewidth}{#1}\toprule\BODY\bottomrule\end{tabularx}%
+  \par\vspace{1pt}\normalsize}
+
+% Boxen
+\tcbset{zfbox/.style={enhanced,arc=1.5mm,boxrule=0.6pt,
+  left=3pt,right=3pt,top=2pt,bottom=2pt,
+  fonttitle=\sffamily\bfseries\footnotesize,fontupper=\footnotesize,
+  before skip=2.5pt,after skip=2.5pt}}
+
+\newtcolorbox{formel}[1][]{zfbox,colback=blockacc!4,colframe=blockacc,
+  coltitle=white,colbacktitle=blockacc,title={#1}}       % Formel/Kernaussage
+\newtcolorbox{falle}[1][Falle]{zfbox,colback=red!4,colframe=red!65,
+  coltitle=white,colbacktitle=red!65,title={#1}}         % typischer Fehler
+\newtcolorbox{rezept}[1][Rezept]{zfbox,colback=green!4,colframe=green!40!black,
+  coltitle=white,colbacktitle=green!40!black,title={#1}} % Schritt fuer Schritt
+\newtcolorbox{bsp}[1][Beispiel]{zfbox,colback=yellow!8,colframe=black!55,
+  coltitle=white,colbacktitle=black!55,title={#1}}       % durchgerechnet
+\newtcolorbox{achtung}[1][Achtung]{zfbox,colback=red!4,colframe=red!65,
+  coltitle=white,colbacktitle=red!65,title={#1}}
+
+% Bild in Spaltenbreite (Anteil von \linewidth)
+\newcommand{\fig}[2][0.9]{\par\vspace{2pt}{\centering\includegraphics[width=#1\linewidth]{#2}\par}\vspace{1pt}}
+
+% Code
+\lstset{
+  basicstyle=\ttfamily\scriptsize,
+  columns=fullflexible, keepspaces=true,
+  aboveskip=2pt, belowskip=2pt, xleftmargin=3pt,
+  commentstyle=\color{black!55}\itshape,
+  morecomment=[l]{\#}, morecomment=[l]{;},
+  literate={ä}{{\"a}}1 {ö}{{\"o}}1 {ü}{{\"u}}1 {ß}{{\ss}}1
+}
+
+% =====================================================================
+\begin{document}
+
+% ------------------------- Kopf + Inhalt -----------------------------
+% Kein \newpage nach dem Kopf: bei 6 Seiten Budget ist eine eigene
+% Titelseite zu teuer. Alles laeuft in einem Spaltenfluss.
+\begin{multicols*}{2}
+  {\centering
+   {\Large\bfseries \doctitle\par}\vspace{1pt}
+   {\footnotesize Blöcke P1--P6 \quad\textbullet\quad \docauthors
+    \quad\textbullet\quad \docdate\par}}
+  \vspace{4pt}
+  \input{sections/00_navigation}
+  \vspace{2pt}
+  \tableofcontents
+  \vspace{3pt}
+
+  \input{sections/01_cache}
+  \input{sections/02_mmu}
+  \input{sections/03_neon}
+  \input{sections/04_rvv}
+  \input{sections/05_dma}
+  \input{sections/06_riscv}
+  \input{sections/07_multicore}
+  \input{sections/08_reconfig}
+  \input{sections/09_referenz}
+  \input{sections/10_register}
+\end{multicols*}
+
+\end{document}

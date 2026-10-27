@@ -1,0 +1,71 @@
+% !TEX root = ../main.tex
+% ---------------------------------------------------------------------
+%  P2 -- RISC-V Vektorerweiterung
+% ---------------------------------------------------------------------
+\vlsec{cP2}{P2}{SIMD: RISC-V Vektorerweiterung}
+\label{sec:rvv}
+
+\begin{formel}[Der eine Unterschied zu NEON]
+Die Vektorlänge steht \emph{nicht} im Befehlssatz. Derselbe Binärcode
+läuft auf 2-, 4- oder 8-Lane-Hardware -- er braucht nur mehr oder weniger
+Takte. Keine Neukompilierung, kein Multiversioning.
+\end{formel}
+
+\begin{itemize}
+\item 32 Vektorregister \R{v0}--\R{v31}; ein Vektor hält Skalar, Vektor
+      oder Matrix
+\item \T{VL-Register} definiert die benutzte Länge, $\text{VL}\le\text{MAXVL}$
+\item \R{vfadd.s v0,v1,v2}: für $i<\text{VL}$ addieren,
+      für $\text{VL}\le i<\text{MAXVL}$ Nullen schreiben
+\item \R{vconfig} setzt Datenbreite und Registerzahl und schaltet die
+      Einheit ab (Strom!)
+\end{itemize}
+
+\subsection{Strip Mining: Tail-Problem in Hardware gelöst}
+\begin{lstlisting}
+vconfig 0x63        # 32b Daten, 4 vregs, VL=MAXVL
+vfld.s  v1, 0(x4)   # Konstante laden + broadcast
+loop:
+  vsetvl x2, x1     # VL = x2 = min(MAXVL, Rest x1)
+  vflw   v0, 0(x3)  # laedt genau VL Elemente
+  vfadd.s v2, v1, v0
+  vsw    v2, 0(x3)
+  slli x5,x2,2      # Bytes = VL * sizeof(float)
+  add  x3,x3,x5     # Zeiger weiter
+  sub  x1,x1,x2     # Rest verringern
+  bne  x1,x0,loop
+vconfig 0x0         # Vektoreinheit aus
+\end{lstlisting}
+\R{vsetvl} liefert $\min(\text{MAXVL},\text{Rest})$ \ra die letzte
+Iteration verarbeitet automatisch nur den Rest. \T{Kein Tail-Code.}
+
+\subsection{Befehlsklassen}
+\begin{ztab}{@{}lX@{}}
+Load/Store & \R{vlw/vsw} unit-stride \\
+ & \R{vls*/vss*} \T{strided} (jedes 2., 3., \dots{} Element) \\
+ & \R{vlx*/vsx*} \T{indexed} $=$ Gather/Scatter \\
+Integer & \R{vadd}, \R{vmul}, \T{\R{vdiv}}, \R{vsll}, \R{vand},
+  \R{vseq/vslt}, \R{vclip} (fixed point) \\
+Float & \R{vfadd/sub/mul/div}, \R{vfsqrt}, \R{vfmax/min},
+  \R{vfclass}; Suffix \R{.h/.s/.d} $=$ FP16/32/64 \\
+MAC & \R{vfmadd}, \R{vfmsub}, widening \R{vfmaddwdn} \\
+Convert & \R{vfcvt.<ziel>.<quelle>} int$\leftrightarrow$float,
+  float$\leftrightarrow$float \\
+Movement & \R{vins}/\R{vext} (GPR$\leftrightarrow$Lane),
+  \R{vmerge} (maskengesteuert), \R{vrgather}
+  (\R{vd[i]=vs1[vs2[i]]}), \R{vsplat}, \R{vslideup/dwn} \\
+Masken & \R{vmfirst}, \R{vmpopc}, \R{vmiota} \\
+\end{ztab}
+
+\subsection{Gegenüberstellung}
+\begin{ztab}{@{}lXX@{}}
+ & NEON & RISC-V V \\ \midrule
+Länge & fix 128\,Bit & VL variabel \\
+Tail & Hand-Code & \R{vsetvl} \\
+Masken & Behelf (\R{VBSL}) & eigene Maskenregister \\
+Gather/Scatter & -- & \R{vlx*}/\R{vsx*} \\
+Division & Newton-Raphson & \R{vdiv} \\
+FP64 & -- & \R{.d} \\
+\end{ztab}
+Die RVV-Erweiterung behebt also genau die vier Schwachstellen, die bei
+NEON in Abschnitt~\ref{sec:simdgrenzen} als Grenzen stehen.

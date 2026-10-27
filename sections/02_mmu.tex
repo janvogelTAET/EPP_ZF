@@ -1,0 +1,94 @@
+% !TEX root = ../main.tex
+% ---------------------------------------------------------------------
+%  P1 -- Virtual Memory / MMU
+% ---------------------------------------------------------------------
+\vlsec{cP1}{P1}{Virtual Memory \& MMU}
+\label{sec:mmu}
+
+\begin{ztab}{@{}lX@{}}
+Cortex-M & MCU, $<$200\,MHz, meist kein Cache, Code aus Flash \\
+Cortex-R & \T{MPU}: übersetzt \emph{nicht}, prüft nur Rechte (r/w/x) für
+  typ.\ 8 Regionen \ra Taskisolation, „no execute“, Zugriffszeit bleibt
+  vorhersagbar \\
+Cortex-A & \T{MMU}: kann alles der MPU \emph{und} übersetzt Adressen.
+  Voraussetzung für Linux. \\
+\end{ztab}
+
+\subsection{Drei Probleme, eine Lösung}
+\begin{enumerate}
+\item zu wenig RAM \item keine Isolation zwischen Prozessen
+\item Fragmentierung des freien Speichers
+\end{enumerate}
+\SW{Idee} Jeder Prozess bekommt die \emph{Illusion} eines eigenen,
+zusammenhängenden Adressraums. \T{Pages} (typ.\ 4\,kB) virtuell,
+\T{Frames} physisch, \T{Page Table} ordnet zu.
+\begin{itemize}
+\item Aufeinanderfolgende Pages dürfen in verstreuten Frames liegen
+      \ra Fragmentierung erledigt
+\item Jeder Prozess hat eigene Tabelle mit disjunkten Frames
+      \ra Isolation erledigt
+\end{itemize}
+
+\SW{Paging/Swapping} Reicht das RAM nicht, wandert eine selten benutzte
+Page auf die Disk, ihr Eintrag wird invalid. Späterer Zugriff
+\ra \T{Page Fault} \ra OS holt zurück, verdrängt eine andere, Befehl wird
+wiederholt. Dauert $\sim$100\,000 Cycles
+\ra \emph{page miss $=$ task switch}.
+
+\subsection{Adressübersetzung}
+\SW{Einstufig} 32\,Bit $=$ 20\,Bit Page-Nummer $+$ 12\,Bit Offset
+($2^{12}=4$\,kB). Der Offset wird \emph{nicht} übersetzt (Pages und Frames
+sind gleich gross). Page-Nummer indiziert die Tabelle, diese liefert
+Frame-Nummer $+$ Rechte.
+
+\begin{falle}[Warum einstufig nicht geht]
+$2^{20}$ Einträge $\times$ 4\,B $=$ \T{4\,MB Page Table pro Prozess}.
+Bei 50 Prozessen 200\,MB nur für Tabellen.
+\end{falle}
+
+\SW{Zweistufig} $10+10+12$. Die ersten 10\,Bit indizieren eine
+First-Level-Tabelle (1024 Einträge, 4\,kB); jeder Eintrag zeigt auf eine
+Second-Level-Tabelle mit wieder 1024 Einträgen. Ein Prozess, der nur
+10\,MB benutzt, braucht wenige Second-Level-Tabellen \ra statt 4\,MB nur
+ca.\ 20\,kB. Preis: ein zusätzlicher Speicherzugriff pro Übersetzung.
+
+\subsection{TLB (Translation Lookaside Buffer)}
+Ohne TLB kostete jeder Speicherzugriff zwei zusätzliche RAM-Zugriffe nur
+für die Übersetzung -- dreimal langsamer als ganz ohne MMU. Der TLB ist
+der Cache für Übersetzungen: klein, aber hoch assoziativ.
+
+\SW{Warum klein reicht} Ein Eintrag deckt 4\,kB Adressraum ab; 32 Einträge
+schon 128\,kB. Mit Locality sitzt ein Programm fast immer in wenigen Pages.
+
+\begin{ztab}{@{}lXl@{}}
+Cortex-A72 & Struktur & Einträge \\ \midrule
+Micro-TLB D & voll assoziativ & 32 \\
+Micro-TLB I & voll assoziativ & 48 \\
+L2-TLB & 4-way set-assoziativ & 1024 \\
+\end{ztab}
+
+\begin{formel}[Die Analogie, die alles zusammenhält]
+\begin{tabularx}{\linewidth}{@{}XX@{}}
+\T{Cache} & \T{Virtual Memory} \\
+Cache Line & Page / Frame \\
+Tag-RAM & Page Table \\
+Valid Bit & Valid Bit \\
+Offset in der Line & Offset in der Page \\
+Miss \ra nachladen & Page Fault \ra einlagern \\
+Replacement in HW & Replacement im OS (SW) \\
+\end{tabularx}\\[2pt]
+Nur die Zeitskalen unterscheiden sich um Faktor $\sim$1000 -- deshalb
+entscheidet dort Hardware, hier Software.
+\end{formel}
+
+\subsection{\R{vm\_stat} lesen}
+\begin{ztab}{@{}lX@{}}
+free/active/inactive & RAM-Zustand, Auslagerungskandidaten \\
+wired down & nie auslagerbar (Kernel -- wer behandelte sonst den Fault?) \\
+translation faults & Page Faults, meist harmlose \emph{soft faults} \\
+pageins / pageouts & Disk-Transfers \\
+swapins / swapouts & stetig steigend $=$ zu wenig RAM, System thrasht \\
+copy-on-write & Fork teilt Frames bis zum ersten Schreibzugriff \\
+\end{ztab}
+Achtung: Apple Silicon benutzt 16-kB-Pages, nicht 4\,kB wie im Rest der
+Vorlesung.

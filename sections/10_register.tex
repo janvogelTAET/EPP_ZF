@@ -1,0 +1,57 @@
+% !TEX root = ../main.tex
+% ---------------------------------------------------------------------
+%  Stichwortregister -- vom Begriff zur Abschnittsnummer
+%  ERZEUGT von mkreg.py. Neue Eintraege dort ergaenzen und neu laufen
+%  lassen, oder hier von Hand alphabetisch einsortieren.
+% ---------------------------------------------------------------------
+\vlsec{cREF}{REF}{Stichwortregister}
+
+\scriptsize
+\begin{tabularx}{\linewidth}{@{}Xr@{\hskip6pt}Xr@{}}
+Adresszerlegung & \ref{rez:zerlegung} & Mutex & \ref{sec:kohaerenz} \\
+AMAT & \ref{form:amat} & \R{NEXTCONBK} & \ref{rez:ti} \\
+Amdahl & \ref{form:amdahl} & NMRU & \ref{sec:cache} \\
+Assoziativität & \ref{sec:cache} & Offset & \ref{rez:zerlegung} \\
+Autopull/-push & \ref{sec:reconfig} & Page Fault & \ref{sec:mmu} \\
+AXI-Burst & \ref{sec:dma} & Page Table & \ref{sec:mmu} \\
+Bandbreite & \ref{form:bw} & Pairwise & \ref{sec:neon} \\
+\R{BR}/\R{BG} & \ref{sec:dma} & Panic-Signal & \ref{sec:dma} \\
+\R{BSWAP} & \ref{sec:dma} & \R{PERMAP} & \ref{rez:ti} \\
+Cache Line & \ref{sec:cache} & PIO & \ref{sec:reconfig} \\
+CAM & \ref{sec:cache} & PL330 & \ref{sec:dma} \\
+\R{CCR} & \ref{rez:ccr} & Prädikation & \ref{sec:neon} \\
+CGRA & \ref{sec:cgra} & Priority Inversion & \ref{sec:kohaerenz} \\
+\R{CHAIN\_TO} & \ref{sec:dma} & Race Condition & \ref{sec:kohaerenz} \\
+Control Block & \ref{rez:ti} & Reentranz & \ref{sec:multicore} \\
+Copy-on-write & \ref{sec:mmu} & Replacement & \ref{sec:cache} \\
+\R{CPACR} & \ref{sec:neon} & Ringpuffer (HW) & \ref{sec:dma} \\
+CRC im DMA & \ref{sec:dma} & RISC-Prinzipien & \ref{sec:riscv} \\
+Cycle Stealing & \ref{sec:dma} & Routing-Delay & \ref{sec:reconfig} \\
+Dirty Bit & \ref{sec:cache} & RV32C & \ref{sec:riscv} \\
+\R{DMAWFP} & \ref{sec:dma} & Sättigung (Q) & \ref{rez:neondecode} \\
+Doorbell & \ref{sec:multicore} & Scatter-Gather & \ref{falle:dma} \\
+DREQ / TREQ & \ref{sec:dma} & Semaphore & \ref{sec:kohaerenz} \\
+Exclusive Monitor & \ref{sec:multicore} & Shape L/W/N & \ref{rez:neondecode} \\
+Flags (fehlen) & \ref{sec:rvflags} & Side-Set & \ref{sec:reconfig} \\
+\R{FPEXC} & \ref{sec:neon} & SIO & \ref{sec:multicore} \\
+FPGA / LUT & \ref{sec:reconfig} & \R{SLTU} & \ref{sec:rvflags} \\
+FreeRTOS-API & \ref{sec:multicore} & SMP / AMP & \ref{sec:multicore} \\
+Harvard & \ref{sec:cache} & Spinlock & \ref{sec:multicore} \\
+Index & \ref{rez:zerlegung} & \R{SRC\_INC} & \ref{rez:ti} \\
+Intrinsics & \ref{sec:neon} & Strip Mining & \ref{sec:rvv} \\
+Kohärenz (Cache) & \ref{falle:dma} & Swapping & \ref{sec:mmu} \\
+Kohärenz (Multicore) & \ref{sec:kohaerenz} & Tag & \ref{rez:zerlegung} \\
+Lanes & \ref{sec:neon} & Tail-Handling & \ref{sec:simdgrenzen} \\
+Locality & \ref{sec:cache} & \R{TI}-Register & \ref{rez:ti} \\
+Loop Peeling & \ref{sec:dma} & TLB & \ref{sec:mmu} \\
+Loop Unrolling & \ref{sec:neon} & Trashing & \ref{bsp:trash} \\
+LRU & \ref{sec:cache} & Valid Bit & \ref{sec:cache} \\
+MAC / \R{VMLA} & \ref{sec:neon} & VALID/READY & \ref{sec:dma} \\
+Mailbox & \ref{sec:kohaerenz} & Vektorlänge VL & \ref{sec:rvv} \\
+Maske (\R{VBSL}) & \ref{sec:neon} & \R{VLD3} & \ref{sec:neon} \\
+Matrixmult. NEON & \ref{sec:neon} & \R{vm\_stat} & \ref{sec:mmu} \\
+MFIFO & \ref{sec:dma} & \R{vsetvl} & \ref{sec:rvv} \\
+MMU & \ref{sec:mmu} & Wrapping (PIO) & \ref{sec:reconfig} \\
+MPU & \ref{sec:mmu} & Write-Back & \ref{sec:cache} \\
+\end{tabularx}
+\normalsize

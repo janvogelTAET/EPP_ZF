@@ -1,0 +1,154 @@
+% !TEX root = ../main.tex
+% ---------------------------------------------------------------------
+%  P5 -- Multicore
+% ---------------------------------------------------------------------
+\vlsec{cP5}{P5}{Multicore}
+\label{sec:multicore}
+
+\begin{formel}[Amdahl für Kerne]
+\[S(N)=\frac{1}{(1-p)+\dfrac{p}{N}}\]
+$p=80\,\%$ parallel, $N=2$:
+$S=\frac{1}{0.2+0.4}=1.67$. Dieselbe Formel wie für SIMD-Lanes
+(Abschnitt~\ref{form:amdahl}) -- nur heisst $s$ jetzt $N$.
+\end{formel}
+
+\SW{Gründe für mehrere Kerne}
+\begin{itemize}
+\item Komplexität von HW nach SW verschieben: mehrere kleine schnelle
+      RISC-Kerne statt eines grossen superskalaren Out-of-Order-Kerns
+      -- aber \emph{zuerst} die Caches vergrössern, falls das Optimum
+      noch nicht erreicht ist
+\item Lizenzkosten steigen typisch \emph{nicht} linear mit der Kernzahl
+\item little-big-Architekturen sparen Strom (z.\,B.\ 2 Effizienz- $+$
+      2 Performance-Kerne)
+\end{itemize}
+\SW{HW-Grenze} RAM-Bandbreite. \SW{Nachteil} Datenkohärenz.
+
+\subsection{Multitasking-OS (FreeRTOS)}
+Pro Prozessor läuft genau \emph{ein} Task. Bei jedem System-Tick (z.\,B.\
+20\,ms Timer-IRQ) kann der Scheduler nach Priorität wechseln -- technisch
+nur durch Austausch des \T{Stackpointers}; jeder Task hat seinen eigenen
+Stack. Neue Tasks aus der \emph{ready}-Liste; wartende wandern in die
+\emph{blocked}-Liste.
+\SW{Vorteil} keine Cycles für Polling, einfache Programmierung.
+\SW{Problem} Datenkohärenz und geteilte Ressourcen.
+
+\begin{falle}[Reentranz ist Pflicht]
+Nicht reentrant: \R{temp} als \emph{globale} Variable in \R{swap()} --
+zwei gleichzeitig aktive Instanzen zerstören sich gegenseitig.
+Reentrant: \R{temp} \emph{lokal} (auf dem eigenen Stack) -- dann dürfen
+Tasks und Kerne denselben Code teilen.
+\end{falle}
+
+\subsection{Sechs Ursachen für Kohärenzprobleme}
+\label{sec:kohaerenz}
+\begin{ztab}{@{}lX@{}}
+Stale Data & Core 1 liest den alten Wert aus seinem Cache \\
+Write-Write & beide schreiben gleichzeitig, Ergebnis unbestimmt \\
+Read-Modify-Write & beide lesen 10, schreiben 11 -- ein Inkrement weg \\
+Non-Atomic Multiword & 64\,Bit als zwei 32-Bit-Writes, Leser sieht Mix \\
+Out-of-Order & \R{flag=1} wird vor \R{data=42} sichtbar \\
+DMA vs.\ CPU & DMA liest, während die CPU noch schreibt \\
+\end{ztab}
+
+\begin{bsp}[Race Condition: \R{counter++}]
+\begin{lstlisting}
+counter++  ->  LOAD counter / ADD 1 / STORE counter
+
+Core0: LOAD 42      Core1: LOAD 42
+       ADD 1               ADD 1
+       STORE 43            STORE 43   -> 43 statt 44
+\end{lstlisting}
+Je $10^6$ Inkremente ergeben \emph{nicht} $2\cdot10^6$.
+Lösung: \R{lock(); counter++; unlock();} bzw.\ konzeptionell
+\R{atomic\_fetch\_add(\&counter,1)}.
+\end{bsp}
+
+\subsection{Kooperation paralleler Prozesse}
+\SW{Mutual Exclusion brutal} Scheduler, andere CPUs und Interrupts
+abschalten und Caches flushen. \SW{Sauber} Semaphore/Mutex.
+\begin{ztab}{@{}lX@{}}
+Kommunikation & \T{Mailbox} (blockiert) $|$ \T{Message Queue} \\
+Synchronisation & \T{Semaphore} (zählend, z.\,B.\ 3 gleiche Ressourcen)
+  $|$ \T{Mutex} $|$ \T{Flags} \\
+\end{ztab}
+
+\begin{falle}[Priority Inversion]
+Ein niederpriorer Task hält das Semaphor und blockiert damit einen
+hochprioren; ein mittelpriorer verdrängt den niederprioren dauernd
+\ra der hochpriore wartet indirekt auf einen Task, der nie drankommt.\\
+\T{Lösung:} \T{Mutex} mit \emph{Priority Inheritance} -- der Halter erbt
+vorübergehend die hohe Priorität.\\
+\emph{Mars Pathfinder 1997}: genau dieser Fehler, sporadische Resets;
+Fix war Priority Inheritance in VxWorks.
+\end{falle}
+
+\SW{SMP} identische CPUs, \emph{ein} OS.
+\SW{AMP} eine OS-Instanz pro Kern, braucht HW-Unterstützung für
+Semaphore/Mutex.
+
+\subsection{FreeRTOS-Kurzreferenz}
+\begin{ztab}{@{}lX@{}}
+\R{xTaskCreate(fn,name,stack,par,prio,\&h)} & Task anlegen \\
+\R{vTaskStartScheduler()} & Scheduler starten \\
+\R{vTaskDelay(ms)} & blockieren (nicht pollen!) \\
+\R{xQueueCreate(len,size)} & Queue anlegen \\
+\R{xQueueSend/Receive(q,\&v,wait)} & Rückgabe \R{pdPASS} prüfen \\
+\R{xMessageBufferSend/Receive} & variable Nachrichtenlänge \\
+\R{xSemaphoreCreateMutex()} & Mutex (mit Prio-Vererbung) \\
+\R{xSemaphoreTake(m,portMAX\_DELAY)} & kritischen Abschnitt betreten \\
+\R{xSemaphoreGive(m)} & verlassen \\
+\R{xTaskNotifyWait} / \R{\dots FromISR} & leichtgewichtiges Signal \\
+\R{vTaskCoreAffinitySet(h,1<<n)} & Task an Kern $n$ binden \\
+\end{ztab}
+SMP-Konfiguration: \R{configNUM\_CORES 2},
+\R{configRUN\_MULTIPLE\_PRIORITIES}, \R{configUSE\_CORE\_AFFINITY},
+\R{configUSE\_PREEMPTION}.
+
+\subsection{RP2350 Multiprozessor-Subsystem}
+$2\times$Armv8-M (DSP, FPU, Security) \emph{oder} $2\times$\R{RV32IMAC};
+Mischbetrieb über \R{ARCHSEL} möglich, braucht aber zwei Programmimages.
+\begin{itemize}
+\item symmetrische Bussicht: beide Kerne erreichen alle Ressourcen gleich
+      schnell
+\item pro Kern zwei 32-Bit-Links zum Systembus (Instruktion $+$
+      Load/Store $=$ Harvard)
+\item ungenutzte Kerne in Reset mit abgeschaltetem Takt
+      \ra \emph{null} dynamische Leistung (CMOS)
+\item alle Interrupts gehen an beide Kerne, der interne Controller abonniert
+\end{itemize}
+
+\SW{SIO (Single-cycle IO)}
+\begin{ztab}{@{}lX@{}}
+Spinlocks & 32 Stück, Ein-Bit-Flag je Adresse. \emph{Lesen} $=$ Anspruch
+  (Rückgabe $\neq0$ \ra erhalten), \emph{Schreiben} (beliebiger Wert) $=$
+  freigeben. Bei Gleichstand gewinnt Core\,0. Nur für sehr kurze
+  kritische Abschnitte (Spinning ist teuer). \\
+FIFOs & Inter-Processor Mailboxes, 32\,Bit breit, 4 Einträge tief;
+  Flags \R{VLD}/\R{RDY}/\R{ROE}/\R{WOF} (letzte zwei sticky); IRQ\,25 \\
+Doorbells & 8 Flags je Richtung, ein IRQ pro Kern (26), für
+  \emph{kumulative, ungeordnete} Ereignisse \\
+Rest & \R{CPUID} (0/1), Integer-Divider, Interpolator,
+  RISC-V-Platform-Timer, GPIO fürs Bitbanging; alles doppelt für
+  secure/non-secure \\
+\end{ztab}
+
+\begin{formel}[Global Exclusive Monitor (empfohlen statt Spinlocks)]
+Processing Elements: Core\,0, Core\,1 und \emph{der DMA}.
+Reservation Page $=$ beliebige 16-B-ausgerichtete SRAM-Region.
+Ein exclusive Write gelingt nur, wenn
+(a)~ein exclusive Read desselben PE voranging,
+(b)~nur eine Reservation offen ist,
+(c)~Adresse, Grösse und Rechte übereinstimmen und
+(d)~kein anderes PE seither in dieselbe Granule geschrieben hat.
+Sonst wird der Write verworfen und meldet das zurück.
+\end{formel}
+\begin{lstlisting}
+arm_acquire:               lr.w rd,(rs1)
+  LDREX   r1,[r0]            ; Reservation setzen
+  CMP     r1,#0            sc.w rd,rs2,(rs1)
+  STREXEQ r1,r2,[r0]         ; rd=0 ok, !=0 fehlgeschlagen
+  CMPEQ   r1,#0
+  BNE     acquire
+\end{lstlisting}
+RISC-V zusätzlich \R{amoadd/amoswap/amoand/\dots} (Extension \R{A}).

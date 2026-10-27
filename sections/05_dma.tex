@@ -1,0 +1,255 @@
+% !TEX root = ../main.tex
+% ---------------------------------------------------------------------
+%  P3 -- DMA
+% ---------------------------------------------------------------------
+\vlsec{cP3}{P3}{DMA (Direct Memory Access)}
+\label{sec:dma}
+
+\SW{Motivation} Ein Interrupt pro Byte kostet $\sim$100 Cycles
+Kontextwechsel -- \emph{für ein Byte}. DMA: einmal konfigurieren, \emph{ein}
+Interrupt für N Byte.
+
+\begin{bsp}[4\,kB von einer Peripherie-FIFO]
+byteweiser IRQ: $4096\times100=409\,600$ Cycles CPU-Zeit\\
+DMA: $\sim$200 Setup $+$ 1 IRQ $\approx$ 300 Cycles \ra Faktor $\sim$1400.
+\end{bsp}
+
+\begin{formel}[Worin der Gewinn wirklich liegt]
+Nicht in der Transferdauer -- die bestimmt die Peripherie -- sondern
+darin, dass die CPU in dieser Zeit rechnen oder \emph{schlafen} kann.
+Darum gehört DMA ins Fach „Power \emph{and} Performance“.
+\end{formel}
+
+\subsection{DMA als zweiter Busmaster}
+\begin{ztab}{@{}lX@{}}
+\R{BR}/\R{BG} & Bus Request/Grant: CPU schaltet ihre Treiber hochohmig \\
+\R{RS}/\R{DS} & CPU adressiert und beschreibt die DMA-Register \\
+\R{REQ}/\R{ACK} & Handshake mit dem I/O-Gerät \\
+\R{IRQ} & Block fertig \\
+\end{ztab}
+\begin{formel}[Doppelrolle]
+Beim \emph{Konfigurieren} ist der DMA \T{Slave}, beim \emph{Transfer}
+\T{Master}. Genau das unterscheidet ihn von jeder anderen Peripherie.
+(ARM DMAC: AXI-64-Master für Daten, APB-32-Slave für Register.)
+\end{formel}
+
+\SW{Arbitrierung}
+\begin{ztab}{@{}lXl@{}}
+Modus & Verhalten & CPU-Latenz \\ \midrule
+Burst/Block & Bus bis Blockende halten & schlecht \\
+Cycle Stealing & 1 Zyklus, freigeben, wieder & gut \\
+Transparent & nur ungenutzte Zyklen & keine \\
+\end{ztab}
+
+\SW{Richtungen} mem\,\ra\,mem (voller Bustakt);
+mem\,\ra\,Peripherie und Peripherie\,\ra\,mem (\emph{von der Peripherie
+getaktet}, über full/empty-Flags oder req/ack);
+externes Interface\,\ra\,mem mit Paketlänge $+$ IRQ (Ethernet).
+
+\begin{formel}[Dasselbe Pacing-Konzept, drei Namen]
+\T{Peripheral Request} (\R{DMAWFP}, PL330) $=$
+\T{DREQ} (BCM2835) $=$ \T{TREQ} (RP2350).
+\end{formel}
+
+\subsection{Die zwei Fallstricke}
+\label{falle:dma}
+\begin{falle}[1 -- Cache-Kohärenz]
+Write-Back heisst: das RAM ist veraltet, der externe DMA sieht den Cache
+nicht.\\
+\T{CPU\,\ra\,Peripherie:} Puffer noch dirty im Cache \ra DMA liest alte
+Daten \ra vorher \T{clean}.\\
+\T{Peripherie\,\ra\,CPU:} CPU trifft die alte Cache-Zeile \ra vorher
+\T{invalidate}.\\
+Alternativen: nicht cachebarer Puffer, oder HW-Kohärenz
+(Zynq \T{ACP}-Port über die Snoop Control Unit).
+\end{falle}
+
+\begin{falle}[2 -- Physische Adressen]
+Der DMA hat \emph{keine} MMU, keinen TLB. Ein Programm-Pointer ist
+virtuell \ra stille Datenkorruption statt Segfault.\\
+Und: ein virtuell zusammenhängender Puffer ist physisch fast nie
+zusammenhängend (1\,MB $=$ 256 beliebig verteilte Frames).\\
+\T{Daraus folgt die gesamte restliche Komplexität}: Control Blocks,
+verkettete Listen und Befehlssätze existieren, damit ein Transfer aus
+mehreren Stücken bestehen kann (\T{Scatter-Gather}). Alternative:
+physisch zusammenhängend allozieren (CMA, VideoCore-Mailbox).
+\end{falle}
+
+\subsection{Zynq: Bandbreite}
+\begin{formel}[Bandbreite]
+\label{form:bw}
+\[\text{Bandbreite}=\text{Takt}\times\text{Busbreite in Byte}\]
+DMA läuft auf \R{CPU\_2x}. Bei CPU\_6x $=$ 800\,MHz (1:3) also 266\,MHz,
+Central Interconnect 64\,Bit:
+$266\,\text{MHz}\times8\,\text{B}=\T{2.13\,GB/s}$.
+Slave Interconnect nur 32\,Bit \ra die Hälfte.
+\end{formel}
+Die Register hängen am APB mit \R{CPU\_1x} ($\sim$133\,MHz, nicht
+gepipelinet) \ra \emph{ein} Registerwrite kostet Dutzende CPU-Cycles.
+Darum lohnt DMA erst ab grossen Blöcken.
+Clock-Domain-Übergänge (ASYNC, FIFO) kosten Latenz \ra \T{Burst} --
+dasselbe Amortisationsargument wie die Cache Line in P1.
+
+\subsection{ARM PL330: DMA mit eigenem Befehlssatz}
+\begin{itemize}
+\item AMBA-PrimeCell-IP von ARM; die Engine \emph{holt ihr Programm aus
+      dem Speicher} über das AXI-Master-Interface
+\item 8 Kanäle $=$ Threads, Round-Robin, gleiche Priorität
+\item \T{eigener I-Cache}: 8 Lines à 4 Worte; während eines Line-Loads
+      darf ein anderer Kanal aktiv sein
+\item MFIFO $128\times64$\,Bit, von allen Kanälen geteilt --
+      \emph{entkoppelt} Burstlänge und Breite von Quelle und Ziel
+\item APB-Slave non-secure \R{0xF800\_4000} / secure \R{0xF800\_3000}
+\end{itemize}
+
+\begin{lstlisting}
+DMAMOV CCR, SB4 SS64 DB4 DS64  # Src+Dst: 4 Beats a 64b
+DMAMOV SAR, 0x1000             # Quelladresse
+DMAMOV DAR, 0x4000             # Zieladresse
+DMALP 16
+  DMALD                        # 4 x 64b = 32 B laden
+  DMAST                        # 32 B speichern
+DMALPEND
+DMAEND
+\end{lstlisting}
+
+\begin{rezept}[Rezept: \R{CCR} dekodieren]
+\label{rez:ccr}
+\R{S}/\R{D} $=$ Source/Destination, \R{B}$n$ $=$ Burst Length (Beats),
+\R{S}$m$ $=$ Burst Size (Bit pro Beat).
+\begin{enumerate}
+\item Bytes pro \R{DMALD} $=n\times m/8$
+\item Gesamtmenge $=$ Bytes pro Burst $\times$ Schleifenzahl
+\item Prüfen, ob Quell- und Zielseite gleich viel bewegen
+\end{enumerate}
+Oben: $4\times64/8=32$\,B, $16\times32=\T{512\,B}$.
+\end{rezept}
+
+\begin{falle}[„Loop fits in one cache line (4 I-words)“]
+Der Schleifenkörper hat genau 4 Instruktionen \ra einmal geholt,
+16$\times$ ausgeführt. Ohne Source-Burst (\R{SB1}) braucht man
+$4\times$\R{DMALD} $+$ \R{DMAST} $=$ 6 Instruktionen \ra passt nicht mehr,
+die Engine fetcht in \emph{jedem} Durchlauf nach. Zweiter Verlust:
+4 AXI-Adressphasen statt einer.\\
+\T{Das ist Cache Trashing aus P1, eine Ebene tiefer.}
+\end{falle}
+
+\SW{Peripherie-Transfer} \R{DMAWFP} blockiert, bis die Peripherie ihren
+Request zieht -- die anderen 7 Kanäle laufen weiter. Der Request trägt
+einen \emph{Typ} (\R{DxTYPE}: 00 single, 01 burst); danach laufen Befehle
+mit Suffix \R{B} nur bei Burst, mit \R{S} nur bei Single.
+\T{Prädikation in der Zeit}, analog zu NEONs Masken im Raum.
+\R{DMALPFE} $=$ Loop Forever, Abbruch über \R{DRLAST} der Hardware.
+\R{DMASTP} $=$ Store \emph{and notify} (das ACK) \ra die letzte
+Transaktion wird aus der Schleife gezogen (15$+$1, Loop Peeling).
+
+\begin{ztab}{@{}lX@{}}
+Daten & \R{DMALD/ST}, \R{DMALDP/STP}, \R{DMASTZ} (memset in HW) \\
+Fluss & \R{DMALP/LPEND/LPFE}, \R{DMAGO/KILL/END/NOP} \\
+Sync & \R{DMAWFP}; \R{DMAWFE}/\R{DMASEV} \emph{Kanal-zu-Kanal}
+  \ra CPU-freie Pipelines; \R{DMAFLUSHP} \\
+Barrieren & \R{DMARMB} / \R{DMAWMB} \\
+Adressen & \R{DMAADDH} / \R{DMAADNH} \ra 2D und Stride \\
+\end{ztab}
+
+\begin{formel}[VALID/READY -- das universelle AMBA-Handshake]
+Sender zieht \R{VALID}, Empfänger \R{READY}; die Übertragung findet im
+Takt statt, in dem \emph{beide} high sind. Keine Seite darf auf die andere
+warten, bevor sie selbst setzt (sonst Deadlock). Funktioniert bei
+beliebigem Geschwindigkeitsverhältnis.
+\end{formel}
+
+\subsection{BCM2835 (Raspberry Pi): Control Blocks}
+16 Kanäle, keine ISA, stattdessen eine \T{verkettete Liste} von CBs --
+8 Worte à 32\,Bit $=$ 32\,B, 32-B-aligned, als \emph{ein} Burst geholt:
+\begin{ztab}{@{}clcl@{}}
+\# & Feld & \# & Feld \\ \midrule
+0 & \R{TI} & 3 & \R{TXFR\_LEN} \\
+1 & \R{SOURCE\_AD} & 4 & \R{STRIDE} (2D) \\
+2 & \R{DEST\_AD} & 5 & \R{NEXTCONBK} \\
+\multicolumn{4}{@{}l}{6--7 reserved, auf 0 setzen} \\
+\end{ztab}
+\SW{Start} CB-Adresse in \R{CONBLK\_AD} schreiben.
+\SW{Stop} Transfer fertig \emph{und} \R{NEXTCONBK}$=0$ \ra ACTIVE-Bit wird
+gelöscht.
+\SW{Warum 8 Worte} 32\,B ist eine natürliche Burstgrösse und eine
+Zweierpotenz \ra CBs sind array-indizierbar und ragen nie über eine Grenze.
+\SW{\R{NEXTCONBK}} erlaubt Scatter-Gather und Ringpuffer (letzter CB zeigt
+auf den ersten) komplett ohne CPU.
+
+\begin{rezept}[Rezept: \R{TI}-Register setzen]
+\label{rez:ti}
+Zeigt die Adresse auf \emph{Speicher}, muss sie hochzählen; zeigt sie auf
+ein \emph{Peripherieregister} (FIFO), darf sie sich \textbf{nicht} ändern.
+\begin{tabularx}{\linewidth}{@{}Xccc@{}}
+Transfer & \R{SRC\_INC} & \R{DEST\_INC} & \R{DREQ} \\
+mem \ra mem & 1 & 1 & -- \\
+mem \ra Periph. & 1 & \textbf{0} & DEST \\
+Periph. \ra mem & \textbf{0} & 1 & SRC \\
+\end{tabularx}\\[2pt]
+Vergessen $=$ der DMA überschreibt den halben Peripherie-Adressraum.
+\end{rezept}
+
+\begin{ztab}{@{}lX@{}}
+\R{PERMAP} 20:16 & welches Ready-Signal (1--31) \\
+\R{WAITS} 25:21 & Wartezyklen einfügen $=$ Bandbreite drosseln \\
+\R{BURST\_LENGTH} 15:12 & Burstlänge \\
+\R{SRC/DEST\_WIDTH} & 32 oder 128\,Bit \\
+\R{WAIT\_RESP} 3 & auf AXI Write Response warten \\
+\R{TDMODE} 1 & 2D-Modus, nutzt \R{STRIDE} \ra Rechteck aus Framebuffer \\
+\R{INTEN} 0 & Interrupt freigeben \\
+\R{SRC\_IGNORE} 11 & nicht lesen \ra schnelles Nullen (memset) \\
+\R{DEST\_IGNORE} 7 & nicht schreiben \ra \emph{Prefetch in den L2} \\
+\end{ztab}
+
+\begin{formel}[Panic-Signal $=$ QoS in Hardware]
+Droht einer Peripherie-FIFO Under- oder Overflow, erhöht der DMA
+\emph{dynamisch} sein AXI-Prioritätslevel. Normalbetrieb niedrige
+Priorität (CPU nicht stören), Notfall Vorfahrt. Damit muss man sich nicht
+zwischen Durchsatz und CPU-Latenz entscheiden.
+\end{formel}
+
+\subsection{RP2350: vier Register pro Kanal}
+16 Kanäle, kein CB, keine ISA: \R{READ\_ADDR}, \R{WRITE\_ADDR},
+\R{TRANS\_COUNT}, \R{CTRL} -- alle vier zählen während der Ausführung mit
+(Fortschritt jederzeit lesbar).
+\SW{Dual bus ports} je ein Lese- \emph{und} ein Schreibzugriff pro Takt
+\ra 1 Transfer/Takt im Dauerbetrieb.
+
+\begin{formel}[Der RP2350-Trick]
+Die DMA-Konfigurationsregister sind normale memory-mapped Register --
+also kann \emph{ein DMA-Kanal einen anderen programmieren}. Damit baut man
+Scatter-Gather aus einem Design ohne jede Listenunterstützung nach.
+\end{formel}
+
+\begin{ztab}{@{}lX@{}}
+\R{EN}, \R{HIGH\_PRIORITY} & aktiv, mehr Bandbreite \\
+\R{DATA\_SIZE} 3:2 & 8/16/32\,Bit \\
+\R{INCR\_READ/WRITE} ($+$\R{\_REV}) & hochzählen / rückwärts \\
+\R{RING\_SEL}, \R{RING\_SIZE} & „freeze all but $n$ lower bits“
+  $=$ \T{Ringpuffer in HW}, Puffer auf $2^n$ ausgerichtet \\
+\R{CHAIN\_TO} 16:13 & anderen Kanal auslösen \\
+\R{TREQ\_SEL} 22:17 & DREQ-Nummer oder Timer \\
+\R{BSWAP} 24 & Endianness gratis \\
+\R{SNIFF\_EN} 25 & \T{CRC während des Transfers} \\
+\R{BUSY} 26, Fehlerflags 31:29 & Status \\
+\end{ztab}
+\SW{Weiter} \R{TRANS\_COUNT.MODE} (\R{0x0} stoppen, \R{0x1} neu laden
+$+$ IRQ, \R{0xF} endlos); \R{INTR/INTE/INTF/INTS};
+\R{TIMER0-3} (Taktteiler \ra Transfer mit exakt fester Rate ganz ohne
+Peripherie, z.\,B.\ 44.1\,kHz an einen DAC);
+\R{SNIFF\_CTRL} (CRC-32 IEEE\,802.3 / CRC-16-CCITT / 32-Bit-Summe);
+\R{MULTI\_CHAN\_TRIGGER}; \R{CHAN\_ABORT}.
+
+\subsection{Drei Philosophien im Vergleich}
+\begin{ztab}{@{}lXXX@{}}
+ & PL330 & BCM2835 & RP2350 \\ \midrule
+Beschreibung & Programm & CB-Liste & 4 Register \\
+Kanäle & 8 & 16 & 16 \\
+Verkettung & Programm & \R{NEXTCONBK} & \R{CHAIN\_TO} \\
+Schleifen & ja & nein & nein \\
+Komplexität & hoch & mittel & niedrig \\
+\end{ztab}
+Drei Punkte auf dem Spektrum Zustandsmaschine\,$\leftrightarrow$\,Prozessor.
+\emph{Alle drei lösen dasselbe Problem} -- wer Falle 2 verstanden hat,
+kann sich jede der drei Lösungen herleiten.
