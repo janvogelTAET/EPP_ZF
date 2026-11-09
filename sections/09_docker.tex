@@ -1,0 +1,300 @@
+% !TEX root = ../main.tex
+% ---------------------------------------------------------------------
+%  Docker -- Software-Virtualisierung mit Containern
+% ---------------------------------------------------------------------
+\section{Docker}
+\label{sec:docker}
+
+\SW{Wozu} Plattform zur \T{Software-Virtualisierung}: Software wird in
+standardisierte, wiederverwendbare Einheiten verpackt, die \emph{alles}
+enthalten, was zum Ausführen nötig ist. Diese Einheiten laufen auf nahezu
+jedem Rechner direkt \ra portabel, skalierbar, unkompliziert.
+Das Problem, das sie löst: „Bei mir läuft's!“ -- Abhängigkeiten,
+Versionskonflikte, Installationsprozeduren.
+
+\SW{Abgrenzung} Docker virtualisiert \emph{nur den Linux-Kernel}, nicht
+die ganze Maschine. Deshalb gilt immer \T{Container-OS $=$ Host-OS} --
+anders als bei einer virtuellen Maschine. Auf Windows/macOS braucht Docker
+deshalb eine VM (WSL). Die Programme laufen direkt auf dem Host-Kernel;
+in \R{ps ax} auf dem Host sieht man den Container-Prozess.
+
+\subsection{Image vs.\ Container}
+\begin{ztab}{@{}lXX@{}}
+ & Image & Container \\ \midrule
+Was & Bauplan, alles Nötige zum Ausführen & ein \emph{ausgeführtes} Image \\
+Dateisystem & \T{read-only}, unveränderlich & \T{read-write} Overlay über dem Image \\
+Anzahl & eines & beliebig viele aus einem Image \\
+Platz & volle Grösse & nur die \emph{Änderungen} gegenüber dem Image \\
+Lebensdauer & bis \R{rmi} & bis \R{rm}, überlebt das Stoppen \\
+\end{ztab}
+
+\begin{formel}[Der Satz, der alles trägt]
+Das Ausführen eines \emph{Images} erzeugt einen \emph{Container} --
+nie umgekehrt. Änderungen zur Laufzeit (Logfiles, DB-Einträge,
+nachinstallierte Pakete) landen im Overlay des Containers, das Image
+bleibt unberührt.
+\end{formel}
+
+\subsection{Host und Kapselung}
+\SW{Host} der Rechner mit dem OS, auf dem die Container laufen (hier
+Raspberry Pi OS). Er stellt nur die grundlegendsten OS-Funktionen bereit:
+nacktes Dateisystem, Prozesse, Sockets. \emph{Nicht} Software, Daten,
+User/Gruppen oder IP-Ports -- das muss der Container selbst mitbringen.
+
+\SW{Kapselung} Aus dem Container heraus normalerweise kein Zugriff auf das
+Dateisystem des Hosts oder anderer Container; gilt auch für User und Ports.
+Der Host dagegen kann Container und Images ändern und löschen.
+Die zwei Löcher in dieser Wand sind \R{docker cp} und \T{Volumes}.
+
+\subsection{Lebenszyklus}
+Vier Zustände: \T{created} $\to$ \T{running} $\to$ \T{stopped} $\to$
+\T{deleted}, dazu das lokale Image-Repository als fünfter Knoten:
+\begin{lstlisting}
+Docker Hub --pull--> lokales Image-Repo
+  lokales Repo --run-----> running
+  lokales Repo --create--> created --start--> running
+  running  --stop--> stopped --start/restart--> running
+  stopped/created --rm--> deleted
+  Container --commit--> lokales Image-Repo
+\end{lstlisting}
+\begin{ztab}{@{}lX@{}}
+\R{docker run <img>} & Image \ra Container erzeugen \emph{und} starten \\
+\R{docker create <img>} & nur erzeugen (Zustand \emph{created}) \\
+\R{docker start <cnt>} & starten, \emph{detached} (Hintergrund) \\
+\R{docker start -i <cnt>} & starten, \emph{attached} (Vordergrund) \\
+\R{docker stop <cnt>} & running \ra stopped \\
+\R{docker restart <cnt>} & stop, dann start \\
+\R{docker rm <cnt>} & Container löschen \\
+\R{docker rmi <img>} & Image löschen \\
+\end{ztab}
+
+\begin{falle}[Drei Stolperstellen]
+1.~\T{Jedes \R{run} erzeugt einen \emph{neuen} Container} -- nicht
+\R{run} zum Wiederstarten nehmen, sondern \R{start}.\\
+2.~Ein Image lässt sich \textbf{nicht} löschen, solange noch ein Container
+davon existiert.\\
+3.~Wer \R{-it} beim \R{create} vergisst, kann den Container später nicht
+interaktiv nutzen -- die Option muss schon beim \emph{Erzeugen} dabei sein.
+\end{falle}
+
+\subsection{Die wichtigsten Kommandos}
+\begin{ztab}{@{}lX@{}}
+\R{docker image ls} & lokale Images (kurz: \R{docker images}) \\
+\R{docker ps} & laufende Container (lang: \R{container ls}) \\
+\R{docker ps -a} & auch beendete \\
+\R{docker ps -a --size} & mit Platzbedarf \\
+\R{docker run -it <img>} & interaktiv (siehe unten) \\
+\R{docker run --rm <img>} & Container nach Ende sofort löschen \\
+\R{docker run --name <n> <img>} & eigener Name statt Zufallsname \\
+\R{docker rename <alt> <neu>} & nachträglich umbenennen \\
+\R{docker attach <cnt>} & Terminal an Hintergrund-Container hängen \\
+\R{docker container prune} & \emph{alle} gestoppten Container löschen \\
+\R{docker login -u <user>} & an Docker Hub anmelden \\
+\R{docker image push <tag>} & Image auf Docker Hub laden \\
+\end{ztab}
+Docker vergibt jedem Container eine zufällige \T{ID} und einen zufälligen
+\T{Namen}; Kommandos akzeptieren beides. Fehlt ein Image lokal, lädt
+\R{run} es automatisch von Docker Hub.
+
+\begin{formel}[Was \R{-i} und \R{-t} bedeuten]
+\R{-i} verbindet den Container mit der Standardeingabe, \R{-t} legt einen
+Pseudo-Terminalemulator davor. Zusammen \R{-it} ergibt eine
+Terminal-Sitzung wie bei \R{ssh}.\\
+\T{Ohne \R{-it} beendet sich ein Shell-Container sofort}: die \R{bash}
+findet keine Standardeingabe und bricht ab -- der häufigste Anfängerfehler.
+\end{formel}
+
+\subsection{Beenden und Trennen}
+\begin{ztab}{@{}lX@{}}
+\R{exit} & beendet die Shell im Container \ra Container \emph{stopped} \\
+\R{<Ctrl-d>} & dasselbe (beendet die Shell) \\
+\R{<Ctrl-c>} & \emph{nicht-interaktiv}: beendet \R{docker run} und damit
+  den Container; \emph{interaktiv}: beendet nur das gerade laufende
+  Programm \emph{in} der Shell, nicht die Shell \\
+\R{<Ctrl-p> <Ctrl-q>} & \T{detach}: nur das Terminal trennen, Container
+  läuft weiter. Nur bei Containern mit \R{-it}. Zurück mit \R{attach}. \\
+\end{ztab}
+In allen Fällen \emph{existiert} der Container weiter (Status
+\emph{Exited}), bis man ihn mit \R{rm} löscht.
+
+\subsection{Schlanke Images}
+Images sind bewusst minimal -- im Ubuntu-Image fehlen \R{ping}, \R{nano},
+\R{wget}, \R{curl}; vorhanden sind \R{cp}, \R{mv}, \R{mkdir}, \R{cat},
+\R{tar}, \R{apt}, \R{ps}, \R{top}.
+\SW{Nachinstallieren} erst die Paketlisten aktualisieren, dann installieren:
+\begin{lstlisting}
+apt -y update && apt -y install nano
+\end{lstlisting}
+\R{-y} beantwortet alle Rückfragen mit Ja (nötig, weil beim Bauen von
+Images niemand tippt). Die Verkettung mit \R{\&\&} ist üblich -- warum,
+zeigt sich beim Dockerfile.
+
+\SW{Auch die Prozesse sind minimal} Auf einem normalen Linux laufen viele
+Dienste (\R{sshd}, \R{dockerd}, \R{dhcpd}, \dots{} -- in Unix
+\emph{daemons}, Endung \R{d}). Im Ubuntu-Container läuft \T{genau ein
+Prozess: \R{bash}} -- der Container soll nur eine Software ausführen, den
+Rest stellt der Host bereit. Zählen mit \R{ps -aux | wc -l}.
+
+\begin{bsp}[Platzbedarf -- typische Prüfungsfrage]
+\R{docker ps -a --size} zeigt \R{0B (virtual 192MB)}: der Container selbst
+belegt nichts, solange er nichts geändert hat; die 192\,MB sind das Image.
+Installiert man darin 20\,MB Software, wächst der \emph{Container} um
+20\,MB, das Image bleibt gleich gross.\\
+\ra 4 Container aus einem 50-MB-Image ohne Änderungen brauchen zusammen
+\T{50\,MB}, nicht 200. Und: Dateien \emph{im Container} zu löschen gibt
+keinen Platz frei, wenn sie aus dem Image stammen.
+\end{bsp}
+
+\subsection{Hintergrund und zusätzliche Prozesse}
+\begin{ztab}{@{}lX@{}}
+\R{docker run -d <img>} & \T{detached} starten; läuft, bis der gestartete
+  Prozess sich beendet. Für Serverdienste ohne Shell-Interaktion. \\
+\R{docker run -itd <img>} & interaktiv \emph{und} detached; kehrt sofort
+  zurück, später \R{attach} \\
+\R{docker logs <cnt>} & Ausgabe des Containers ansehen \\
+\R{docker logs -f <cnt>} & \emph{folgt} der Ausgabe wie \R{tail -f};
+  Abbruch mit \R{<Ctrl-c>} \\
+\R{docker exec <cnt> <cmd>} & \T{zusätzlichen} Prozess im laufenden
+  Container starten \\
+\R{docker exec -it <cnt> bash} & zweite Shell parallel -- das
+  Debug-Werkzeug \\
+\R{docker exec -d <cnt> <cmd>} & dieser Prozess im Hintergrund \\
+\R{docker top <cnt> ax} & Prozesse \emph{im} Container auflisten \\
+\end{ztab}
+
+\begin{formel}[\R{run} gegen \R{exec} -- der Unterschied]
+\R{run} erzeugt einen \T{neuen Container} aus einem Image.
+\R{exec} startet einen \T{weiteren Prozess} in einem \emph{bereits
+laufenden} Container. \R{exec} auf einen gestoppten Container
+funktioniert nicht.
+\end{formel}
+
+\subsection{Dateien kopieren: \R{docker cp}}
+\begin{lstlisting}
+docker cp <cnt>:<quelle> <ziel>    # Container -> Host
+docker cp <quelle> <cnt>:<ziel>    # Host -> Container
+\end{lstlisting}
+Funktioniert auch bei einem Container im Zustand \emph{created}, also
+bevor er je lief. Typische Abfolge: \R{docker create --name myubuntu -it
+ubuntu} $\to$ \R{docker cp hello.txt myubuntu:/tmp/} $\to$
+\R{docker start myubuntu} $\to$ \R{docker attach myubuntu}.
+
+\subsection{Das geschichtete Container-Dateisystem}
+Das virtuelle Dateisystem eines Containers besteht aus übereinander
+gelegten Schichten:
+\begin{ztab}{@{}lX@{}}
+oben & \T{Container-Layer}, read-write -- die Änderungen \\
+Mitte & weitere \emph{Image}-Schichten: nachinstallierte Software,
+  Webserver, DB, dotnet \dots{} \\
+unten & \T{Base-Image}, meist ein minimales Linux (Ubuntu, Debian) \\
+\end{ztab}
+Alle Schichten ausser der obersten sind \T{read-only}.
+\T{Jeder Container bekommt seinen eigenen Container-Layer} -- auch mehrere
+aus demselben Image. Der Layer wird \emph{mit} dem Container gelöscht.
+\merkzeile Praktisch für reinen Tisch (temporäre Dateien verschwinden),
+unpraktisch für Software, die Daten dauerhaft speichern muss.
+
+\SW{Wo das physisch liegt} \R{/var/lib/docker/overlay2/\dots} und
+\R{/var/lib/containerd/\dots}. Suchen mit
+\R{sudo find /var/lib/ -name <datei>}.
+
+\begin{falle}[Zwei Beobachtungen dazu]
+1.~Bei einem \emph{laufenden} Container findet \R{find} die Datei
+\T{zweimal} (docker und containerd), bei einem gestoppten nur einmal.\\
+2.~Diese Verzeichnisse werden von Docker verwaltet und dürfen
+\textbf{nie} direkt verändert werden.
+\end{falle}
+
+\subsection{Volumes}
+Ein Volume bildet einen Pfad des Host-Dateisystems in das
+Container-Dateisystem ab. Änderungen sind auf beiden Seiten sofort
+sichtbar, und die Dateien \T{überleben das Löschen des Containers} --
+alles andere im Container-Layer nicht.
+
+\begin{ztab}{@{}lX@{}}
+\T{Host Volume} & \R{-v /pfad/im/host:/pfad/im/cnt} -- Nutzer bestimmt
+  beide Seiten \\
+\T{Anonymes V.} & \R{-v /pfad/im/cnt} -- Docker legt das Host-Verzeichnis
+  unter \R{/var/lib/docker/volumes/<hash>/\_data/} an; kaum gebraucht \\
+\T{Named Volume} & \R{-v name:/pfad/im/cnt} -- wie anonym, aber mit Namen \\
+\end{ztab}
+
+\begin{bsp}[Wofür Volumes wirklich da sind]
+Versions-Update eines Datenbankservers: Die containerisierte DB legt ihre
+Daten im Volume ab. Beim Update wird der alte Container gestoppt und
+gelöscht -- die Daten bleiben. Der neue Container aus dem aktuellen Image
+greift auf dieselben Daten zu.
+\end{bsp}
+
+\SW{Administration} \R{docker volume ls} $\cdot$
+\R{docker volume rm <vol>} $\cdot$ \R{docker volume prune}.
+Volumes überleben ihren Container, müssen also von Hand aufgeräumt werden.
+
+\begin{falle}[Warum \R{volume prune} trügerisch ist]
+Es löscht \emph{alle} Volumes, die gerade keinem Container zugeordnet
+sind. Genau die wertvollen Daten eines Volumes, dessen Container du
+versehentlich schon gelöscht hast, sind damit weg -- und es gibt
+\textbf{kein} Docker-Kommando, um vorher den Inhalt eines Volumes
+anzusehen.
+\end{falle}
+
+\subsection{Image aus Container: \R{docker commit}}
+\begin{lstlisting}
+docker commit <container> <image>
+\end{lstlisting}
+Friert die Änderungen eines laufenden oder gestoppten Containers als neue
+Image-Schicht ein. Damit lässt sich manuell installierte Software in ein
+Image übernehmen: Ubuntu starten $\to$ \R{apt install nano} $\to$
+\R{commit} $\to$ das neue Image enthält nano.
+\merkzeile Das ist die Antwort auf „Kann aus einem Container ein Image
+erzeugt werden?“ -- ja, mit \R{commit}. Der saubere Weg bleibt aber das
+Dockerfile.
+
+\subsection{Repositories und Docker Hub}
+\T{Docker Hub} ist das Standard-Repository: \R{docker run} und
+\R{docker pull} holen Images von dort. Öffentliche Repositories sind für
+jeden zugänglich, private nur für den Besitzer (bei Docker Hub ab einer
+gewissen Anzahl kostenpflichtig) -- oder on premise mit eigener
+Repository-Software (CNCF Distribution).
+
+\begin{ztab}{@{}lX@{}}
+\R{docker search <begriff>} & Images suchen; Spalten \R{STARS},
+  \R{OFFICIAL}, \R{AUTOMATED}. Offizielle Images sind vertrauenswürdiger. \\
+\R{docker pull <img>} & herunterladen, ohne zu starten \\
+\end{ztab}
+
+\begin{formel}[Aufbau eines Image-Namens]
+\begin{center}\ttfamily
+<repo>/<source>/<image>:<tag>
+\end{center}
+\begin{tabularx}{\linewidth}{@{}lX@{}}
+\R{<image>} & der Name, z.\,B. \R{ubuntu}, \R{hello-world} \\
+\R{<source>} & Nutzer oder Organisation auf Docker Hub;
+  Standard \R{library} (die offiziellen Images) \\
+\R{<tag>} & die Version; Standard \R{latest} \\
+\R{<repo>} & die Registry; Standard \R{index.docker.io} \\
+\end{tabularx}\\[2pt]
+Also ist \R{docker run hello-world} identisch mit\\
+\R{docker run index.docker.io/library/hello-world:latest}.\\
+Weitere Beispiele: \R{ubuntu:jammy} (22.04),
+\R{kaohslu/epp-demo}, \R{mcr.microsoft.com/dotnet/runtime:5.0}.
+\end{formel}
+
+\begin{falle}[\R{run} aktualisiert nicht]
+\R{docker run <img>} nimmt die \T{neueste lokal vorhandene} Version --
+auch wenn im Repository längst eine neuere liegt. Nur \R{docker pull}
+holt die aktuelle.\\
+Und beim \R{pull}: Das alte Image wird \emph{nicht} überschrieben,
+sondern verliert nur seinen Tag und erscheint mit \R{<none>}
+(\emph{dangling image}) -- Container könnten es noch brauchen.
+\end{falle}
+
+\subsection{Der Weg eines eigenen Images}
+\begin{lstlisting}
+docker build -t <user>/<name> .   # Image bauen und taggen
+docker login -u <user>            # an Docker Hub anmelden
+docker image push <user>/<name>   # hochladen
+docker run <user>/<name>          # auf beliebigem Host starten
+\end{lstlisting}
+Drei Zeilen zum Veröffentlichen, eine zum Benutzen -- ohne dass auf dem
+Zielrechner irgendeine Laufzeitumgebung installiert sein muss.

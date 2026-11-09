@@ -1,0 +1,51 @@
+% !TEX root = ../main.tex
+% ---------------------------------------------------------------------
+%  Stichwortregister -- vom Begriff zur Abschnittsnummer
+%  ERZEUGT von mkreg.py. Neue Eintraege dort ergaenzen und neu laufen
+%  lassen, oder hier von Hand alphabetisch einsortieren.
+% ---------------------------------------------------------------------
+\section{Stichwortregister}
+
+\scriptsize\renewcommand{\arraystretch}{0.9}
+\begin{tabularx}{\linewidth}{@{}Xr@{\hskip4pt}Xr@{\hskip4pt}Xr@{}}
+\R{-it} & \ref{sec:docker} & Doorbell & \ref{sec:multicore} & PIO & \ref{sec:reconfig} \\
+Adresszerlegung & \ref{rez:zerlegung} & DREQ / TREQ & \ref{sec:dma} & PL330 & \ref{sec:dma} \\
+AMAT & \ref{form:amat} & Excl. Monitor & \ref{sec:multicore} & Prädikation & \ref{sec:neon} \\
+Amdahl & \ref{form:amdahl} & Flags (fehlen) & \ref{sec:rvflags} & Prio-Inversion & \ref{sec:kohaerenz} \\
+apt (Container) & \ref{sec:docker} & \R{FPEXC} & \ref{sec:neon} & \R{prune} & \ref{sec:docker} \\
+Assoziativität & \ref{sec:cache} & FPGA / LUT & \ref{sec:reconfig} & Race Condition & \ref{sec:kohaerenz} \\
+Attach / Detach & \ref{sec:docker} & FreeRTOS-API & \ref{sec:multicore} & Reentranz & \ref{sec:multicore} \\
+Autopull/-push & \ref{sec:reconfig} & Harvard & \ref{sec:cache} & Replacement & \ref{sec:cache} \\
+AXI-Burst & \ref{sec:dma} & Image (Docker) & \ref{sec:docker} & Ringpuffer (HW) & \ref{sec:dma} \\
+Bandbreite & \ref{form:bw} & Image-Name / Tag & \ref{sec:docker} & RISC-Prinzip. & \ref{sec:riscv} \\
+Base-Image & \ref{sec:docker} & Index & \ref{rez:zerlegung} & Routing-Delay & \ref{sec:reconfig} \\
+\R{BR}/\R{BG} & \ref{sec:dma} & Intrinsics & \ref{sec:neon} & RV32C & \ref{sec:riscv} \\
+\R{BSWAP} & \ref{sec:dma} & Kohär. Cache & \ref{falle:dma} & Sättigung (Q) & \ref{rez:neondecode} \\
+Cache Line & \ref{sec:cache} & Kohär. Multicore & \ref{sec:kohaerenz} & Scatter-Gath. & \ref{falle:dma} \\
+CAM & \ref{sec:cache} & Lanes & \ref{sec:neon} & Semaphore & \ref{sec:kohaerenz} \\
+\R{CCR} & \ref{rez:ccr} & \R{latest} & \ref{sec:docker} & Shape L/W/N & \ref{rez:neondecode} \\
+CGRA & \ref{sec:cgra} & Lebenszyklus & \ref{sec:docker} & Side-Set & \ref{sec:reconfig} \\
+\R{CHAIN\_TO} & \ref{sec:dma} & Locality & \ref{sec:cache} & SIO & \ref{sec:multicore} \\
+Container & \ref{sec:docker} & Loop Peeling & \ref{sec:dma} & \R{SLTU} & \ref{sec:rvflags} \\
+Container-Layer & \ref{sec:docker} & Loop Unrolling & \ref{sec:neon} & SMP / AMP & \ref{sec:multicore} \\
+Control Block & \ref{rez:ti} & LRU & \ref{sec:cache} & Spinlock & \ref{sec:multicore} \\
+Copy-on-write & \ref{sec:mmu} & MAC / \R{VMLA} & \ref{sec:neon} & \R{SRC\_INC} & \ref{rez:ti} \\
+\R{CPACR} & \ref{sec:neon} & Mailbox & \ref{sec:kohaerenz} & Strip Mining & \ref{sec:rvv} \\
+CRC im DMA & \ref{sec:dma} & Maske (\R{VBSL}) & \ref{sec:neon} & Swapping & \ref{sec:mmu} \\
+Cycle Stealing & \ref{sec:dma} & Matrixmult. & \ref{sec:neon} & Tag & \ref{rez:zerlegung} \\
+dangling image & \ref{sec:docker} & MFIFO & \ref{sec:dma} & Tail-Handling & \ref{sec:simdgrenzen} \\
+detached (-d) & \ref{sec:docker} & MMU & \ref{sec:mmu} & \R{TI}-Register & \ref{rez:ti} \\
+Dirty Bit & \ref{sec:cache} & MPU & \ref{sec:mmu} & TLB & \ref{sec:mmu} \\
+\R{DMAWFP} & \ref{sec:dma} & Mutex & \ref{sec:kohaerenz} & Trashing & \ref{bsp:trash} \\
+\R{docker commit} & \ref{sec:docker} & Named Volume & \ref{sec:docker} & Valid Bit & \ref{sec:cache} \\
+\R{docker cp} & \ref{sec:docker} & \R{NEXTCONBK} & \ref{rez:ti} & VALID/READY & \ref{sec:dma} \\
+\R{docker exec} & \ref{sec:docker} & NMRU & \ref{sec:cache} & Vektorlänge VL & \ref{sec:rvv} \\
+Docker Hub & \ref{sec:docker} & Offset & \ref{rez:zerlegung} & \R{VLD3} & \ref{sec:neon} \\
+\R{docker logs} & \ref{sec:docker} & Overlay-FS & \ref{sec:docker} & \R{vm\_stat} & \ref{sec:mmu} \\
+\R{docker ps} & \ref{sec:docker} & Page Fault & \ref{sec:mmu} & Volume & \ref{sec:docker} \\
+\R{docker pull} & \ref{sec:docker} & Page Table & \ref{sec:mmu} & \R{volume prune} & \ref{sec:docker} \\
+\R{docker run} & \ref{sec:docker} & Pairwise & \ref{sec:neon} & \R{vsetvl} & \ref{sec:rvv} \\
+\R{docker search} & \ref{sec:docker} & Panic-Signal & \ref{sec:dma} & Wrapping (PIO) & \ref{sec:reconfig} \\
+\R{docker top} & \ref{sec:docker} & \R{PERMAP} & \ref{rez:ti} & Write-Back & \ref{sec:cache} \\
+\end{tabularx}
+\normalsize

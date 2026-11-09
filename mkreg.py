@@ -3,6 +3,33 @@
 import unicodedata, sys
 
 E = [
+    ("Base-Image", "sec:docker"),
+    ("Container-Layer", "sec:docker"),
+    ("dangling image", "sec:docker"),
+    ("detached (-d)", "sec:docker"),
+    (r"\R{docker commit}", "sec:docker"),
+    (r"\R{docker cp}", "sec:docker"),
+    (r"\R{docker exec}", "sec:docker"),
+    (r"\R{docker logs}", "sec:docker"),
+    (r"\R{docker pull}", "sec:docker"),
+    (r"\R{docker search}", "sec:docker"),
+    (r"\R{docker top}", "sec:docker"),
+    ("Image-Name / Tag", "sec:docker"),
+    (r"\R{latest}", "sec:docker"),
+    ("Named Volume", "sec:docker"),
+    (r"\R{volume prune}", "sec:docker"),
+    ("Attach / Detach", "sec:docker"),
+    ("apt (Container)", "sec:docker"),
+    ("Container", "sec:docker"),
+    ("Docker Hub", "sec:docker"),
+    (r"\R{docker ps}", "sec:docker"),
+    (r"\R{docker run}", "sec:docker"),
+    ("Image (Docker)", "sec:docker"),
+    (r"\R{-it}", "sec:docker"),
+    ("Lebenszyklus", "sec:docker"),
+    ("Overlay-FS", "sec:docker"),
+    (r"\R{prune}", "sec:docker"),
+    ("Volume", "sec:docker"),
     ("Adresszerlegung", "rez:zerlegung"),
     ("AMAT", "form:amat"),
     ("Amdahl", "form:amdahl"),
@@ -26,7 +53,7 @@ E = [
     (r"\R{DMAWFP}", "sec:dma"),
     ("Doorbell", "sec:multicore"),
     ("DREQ / TREQ", "sec:dma"),
-    ("Exclusive Monitor", "sec:multicore"),
+    ("Excl. Monitor", "sec:multicore"),
     ("Flags (fehlen)", "sec:rvflags"),
     (r"\R{FPEXC}", "sec:neon"),
     ("FPGA / LUT", "sec:reconfig"),
@@ -34,8 +61,8 @@ E = [
     ("Harvard", "sec:cache"),
     ("Index", "rez:zerlegung"),
     ("Intrinsics", "sec:neon"),
-    ("Kohärenz (Cache)", "falle:dma"),
-    ("Kohärenz (Multicore)", "sec:kohaerenz"),
+    ("Kohär. Cache", "falle:dma"),
+    ("Kohär. Multicore", "sec:kohaerenz"),
     ("Lanes", "sec:neon"),
     ("Locality", "sec:cache"),
     ("Loop Peeling", "sec:dma"),
@@ -44,7 +71,7 @@ E = [
     (r"MAC / \R{VMLA}", "sec:neon"),
     ("Mailbox", "sec:kohaerenz"),
     (r"Maske (\R{VBSL})", "sec:neon"),
-    ("Matrixmult. NEON", "sec:neon"),
+    ("Matrixmult.", "sec:neon"),
     ("MFIFO", "sec:dma"),
     ("MMU", "sec:mmu"),
     ("MPU", "sec:mmu"),
@@ -60,16 +87,16 @@ E = [
     ("PIO", "sec:reconfig"),
     ("PL330", "sec:dma"),
     ("Prädikation", "sec:neon"),
-    ("Priority Inversion", "sec:kohaerenz"),
+    ("Prio-Inversion", "sec:kohaerenz"),
     ("Race Condition", "sec:kohaerenz"),
     ("Reentranz", "sec:multicore"),
     ("Replacement", "sec:cache"),
     ("Ringpuffer (HW)", "sec:dma"),
-    ("RISC-Prinzipien", "sec:riscv"),
+    ("RISC-Prinzip.", "sec:riscv"),
     ("Routing-Delay", "sec:reconfig"),
     ("RV32C", "sec:riscv"),
     ("Sättigung (Q)", "rez:neondecode"),
-    ("Scatter-Gather", "falle:dma"),
+    ("Scatter-Gath.", "falle:dma"),
     ("Semaphore", "sec:kohaerenz"),
     ("Shape L/W/N", "rez:neondecode"),
     ("Side-Set", "sec:reconfig"),
@@ -107,9 +134,10 @@ def key(label):
 
 
 E.sort(key=lambda p: key(p[0]))
-half = (len(E) + 1) // 2
-left, right = E[:half], E[half:]
-right += [("", "")] * (len(left) - len(right))
+NCOL = 3
+rows = -(-len(E) // NCOL)
+cols = [E[i*rows:(i+1)*rows] for i in range(NCOL)]
+cols = [c + [("", "")] * (rows - len(c)) for c in cols]
 
 out = [
     "% !TEX root = ../main.tex",
@@ -118,17 +146,16 @@ out = [
     "%  ERZEUGT von mkreg.py. Neue Eintraege dort ergaenzen und neu laufen",
     "%  lassen, oder hier von Hand alphabetisch einsortieren.",
     "% ---------------------------------------------------------------------",
-    r"\vlsec{cREF}{REF}{Stichwortregister}",
+    r"\section{Stichwortregister}",
     "",
     r"\scriptsize",
-    r"\begin{tabularx}{\linewidth}{@{}Xr@{\hskip6pt}Xr@{}}",
+    r"\begin{tabularx}{\linewidth}{@{}" + "Xr@{\\hskip4pt}" * (NCOL - 1) + "Xr@{}}",
 ]
-for (la, ra_), (lb, rb) in zip(left, right):
-    a = f"{la} & \\ref{{{ra_}}}" if la else " & "
-    b = f"{lb} & \\ref{{{rb}}}" if lb else " & "
-    out.append(f"{a} & {b} \\\\")
+for row in zip(*cols):
+    cells = [f"{lab} & \\ref{{{ref}}}" if lab else " & " for lab, ref in row]
+    out.append(" & ".join(cells) + " \\\\")
 out += [r"\end{tabularx}", r"\normalsize", ""]
 
 with open(sys.argv[1], "w", encoding="utf-8") as f:
     f.write("\n".join(out))
-print(f"{len(E)} Eintraege, {len(left)} Zeilen")
+print(f"{len(E)} Eintraege, {rows} Zeilen, {NCOL} Spaltenpaare")

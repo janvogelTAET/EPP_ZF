@@ -1,8 +1,8 @@
 % !TEX root = ../main.tex
 % ---------------------------------------------------------------------
-%  P5 -- Multicore
+%  Multicore
 % ---------------------------------------------------------------------
-\vlsec{cP5}{P5}{Multicore}
+\section{Multicore \& Synchronisation}
 \label{sec:multicore}
 
 \begin{formel}[Amdahl für Kerne]
@@ -102,7 +102,7 @@ Semaphore/Mutex.
 \R{vTaskCoreAffinitySet(h,1<<n)} & Task an Kern $n$ binden \\
 \end{ztab}
 SMP-Konfiguration: \R{configNUM\_CORES 2},
-\R{configRUN\_MULTIPLE\_PRIORITIES}, \R{configUSE\_CORE\_AFFINITY},
+\R{configRUN\_MULTIPLE\_PRIO\dots}, \R{configUSE\_CORE\_AFFINITY},
 \R{configUSE\_PREEMPTION}.
 
 \subsection{RP2350 Multiprozessor-Subsystem}
