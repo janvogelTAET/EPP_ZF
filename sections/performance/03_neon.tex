@@ -1,4 +1,4 @@
-% !TEX root = ../main.tex
+% !TEX root = ../../main_performance.tex
 % ---------------------------------------------------------------------
 %  SIMD mit ARM NEON
 % ---------------------------------------------------------------------
@@ -129,13 +129,10 @@ gelesen, ohne ihn zu kennen.
 Header \R{<arm\_neon.h>}. Registerzuteilung und Scheduling macht weiterhin
 der Compiler.
 
-\SW{Matrixmultiplikation $4\times4$} Daten \T{column-major}
-(\R{C[4*j+i]}). Nicht Skalarprodukt Zeile$\times$Spalte (bräuchte
-horizontale Summen), sondern jede Spalte von C als \T{Linearkombination
-der Spalten von A}: \R{C0 += A0*B0[0] + A1*B0[1] + \dots} über
-\R{vfmaq\_laneq\_f32}. \ra Alle 4 Lanes arbeiten durchgehend, \emph{keine}
-horizontale Operation, keine Transposition. 12 von 16 Q-Registern belegt --
-Registerdruck ist die harte Grenze ($8\times8$ ginge nicht mehr).
+\SW{Registerdruck} Die $4\times4$-Matrixmultiplikation
+(\ref{bsp:matmul}) belegt 12 der 16 Q-Register. Das ist die harte Grenze
+des Verfahrens: $8\times8$ ginge so nicht mehr, man müsste in
+$4\times4$-Blöcke zerlegen.
 
 \SW{MAC-/FIR-Filter} In der Schleife nur \emph{vertikal} rechnen
 (\R{vmla.f32 q0,q1,q2} lane-weise; \R{!} $=$ Post-Increment spart die
@@ -147,6 +144,49 @@ $[a,b],[c,d]\to[a{+}b,\,c{+}d]\to$ Gesamtsumme.
 Pairwise/horizontale Operationen brechen die Lane-Isolation und sind
 langsam. Ein Akkumulator \emph{pro Lane}, Reduktion genau einmal am Schluss.
 \end{falle}
+
+\subsection{De-Interleaving: \R{VLD3} in der Praxis}
+\label{bsp:vld3}
+Die zweite Standardaufgabe (Lab 2): ein RGB-Bild liegt
+\T{interleaved} als \R{R,G,B,R,G,B,\dots} und soll in drei getrennte
+Ebenen zerlegt werden, wobei von jedem Kanal ein anderer Wert abgezogen
+wird.
+\begin{lstlisting}
+uint8x8x3_t intlv_rgb;          /* 3 Register a 8 Byte */
+uint8x8_t one = vmov_n_u8(1);   /* Konstante in alle Lanes */
+uint8x8_t two = vmov_n_u8(2);
+uint8x8_t three = vmov_n_u8(3);
+
+for (int i = 0; i < num8x8; i++) {
+  intlv_rgb = vld3_u8(rgb + 24*i);        /* 24 B = 8 Pixel */
+  intlv_rgb.val[0] = vsub_u8(intlv_rgb.val[0], one);   /* R */
+  intlv_rgb.val[1] = vsub_u8(intlv_rgb.val[1], two);   /* G */
+  intlv_rgb.val[2] = vsub_u8(intlv_rgb.val[2], three); /* B */
+  vst1_u8(r + 8*i, intlv_rgb.val[0]);     /* je 8 B ablegen */
+  vst1_u8(g + 8*i, intlv_rgb.val[1]);
+  vst1_u8(b + 8*i, intlv_rgb.val[2]);
+}
+\end{lstlisting}
+\begin{formel}[Die drei Zahlen, die zusammenpassen müssen]
+\R{vld3\_u8} liest \T{3 Kanäle $\times$ 8 Lanes $=$ 24 Byte} und
+verteilt sie auf \R{val[0..2]}: alle R in das eine Register, alle G in
+das nächste, alle B in das dritte. Deshalb \R{rgb + 24*i} beim Laden,
+aber \R{+ 8*i} beim Speichern -- \R{vst1} schreibt nur \emph{ein}
+Register.\\[2pt]
+Hätte man \R{vld3q\_u8} genommen (128\,Bit), wären es 16 Lanes und
+\R{+ 48*i} bzw.\ \R{+ 16*i}.
+\end{formel}
+\begin{falle}[Der Schrittweiten-Fehler]
+Der häufigste Fehler ist, beim Laden und Speichern dieselbe Schrittweite
+zu nehmen. Laden ist \emph{interleaved} (3 Kanäle auf einmal),
+Speichern ist \emph{planar} (ein Kanal) -- der Faktor 3 steckt genau
+dort. Gegenprobe: nach \R{num8x8} Durchläufen müssen alle drei Zeiger
+auf \R{8*num8x8} stehen und der Quellzeiger auf \R{24*num8x8}.
+\end{falle}
+\merkzeile \R{vld3} leistet in \emph{einem} Befehl, wofür man skalar
+eine Schleife mit \R{i*3+0/1/2} bräuchte -- die Umsortierung passiert
+auf dem Weg aus dem Speicher und kostet nichts extra. Das ist der
+eigentliche Trick der \R{VLDn}-Familie.
 
 \subsection{Grenzen}
 \label{sec:simdgrenzen}
@@ -186,3 +226,55 @@ CPACR ist die Tür des ARM-Kerns zum Coprozessor-Interface,
 Verhalten undefiniert.
 \SW{Flags} \R{armcc -O3 -Otime --vectorize} (veraltet) bzw.
 \R{gcc -O3 -ftree-vectorize}; Diagnose \R{-fopt-info-vec-missed}.
+
+\subsection{Beispiel: 4$\times$4-Matrixmultiplikation}
+\label{bsp:matmul}
+Das kanonische Beispiel, weil es zeigt, wie man eine Schleife
+\emph{umbaut}, statt sie zu übersetzen.
+\begin{lstlisting}
+/* C-Version: 3 Schleifen, 4*4*4 = 64 Mult + 64 Add */
+for (i=0;i<4;i++)
+ for (j=0;j<4;j++) {
+   C[4*j+i] = 0;
+   for (k=0;k<4;k++)
+     C[4*j+i] += A[4*k+i] * B[4*j+k];
+ }
+\end{lstlisting}
+\begin{rezept}[Spaltenweise statt elementweise]
+\begin{enumerate}
+\item \T{Spalten laden}, nicht Zeilen -- \R{float32x4\_t} fasst genau
+      eine Spalte à 4 Floats:
+      \R{A0=vld1q\_f32(A)}, \R{A1=...(A+4)}, usw.
+\item \T{Akkumulatoren nullen}: \R{C0=vmovq\_n\_f32(0)} \dots
+\item Pro Ergebnisspalte $j$: die vier Spalten von \R{A} mit je
+      \emph{einem} Element von \R{B} multiplizieren und aufaddieren --
+      das ist \R{vfmaq\_laneq\_f32}:
+\begin{lstlisting}
+B0 = vld1q_f32(B);
+C0 = vfmaq_laneq_f32(C0, A0, B0, 0);  /* C0 += A0 * B0[0] */
+C0 = vfmaq_laneq_f32(C0, A1, B0, 1);
+C0 = vfmaq_laneq_f32(C0, A2, B0, 2);
+C0 = vfmaq_laneq_f32(C0, A3, B0, 3);
+vst1q_f32(C, C0);                      /* Spalte fertig */
+\end{lstlisting}
+\item Viermal wiederholen für \R{B1}, \R{B2}, \R{B3}.
+\end{enumerate}
+\end{rezept}
+\begin{formel}[Warum gerade so]
+\R{vfmaq\_laneq\_f32(acc, vec, b, n)} multipliziert \emph{alle vier
+Lanes} von \R{vec} mit dem \emph{einen} Skalar \R{b[n]} und addiert auf
+\R{acc} -- in einem Befehl. Das ist \T{Fused Multiply-Add}: nur eine
+Rundung statt zwei, und kein zusätzlicher Befehl zum Aufsplitten des
+Skalars auf alle Lanes.\\[2pt]
+Bilanz: 64 Multiplikationen und 64 Additionen werden zu
+\T{16 FMA-Befehlen} $+$ 8 Loads $+$ 4 Stores. Statt skalar
+$\approx$128 Operationen also 16 -- Faktor 8, weil jeder Befehl 4 Lanes
+rechnet \emph{und} Multiplikation mit Addition verschmilzt.
+\end{formel}
+\begin{falle}[Column-major ist kein Zufall]
+Die Indizierung \R{C[4*j+i]} heisst: die Matrix liegt
+\T{spaltenweise} im Speicher. Nur deshalb lädt \R{vld1q\_f32} eine
+ganze Spalte am Stück. Läge sie zeilenweise, bräuchte man Transponieren
+oder \R{vld4} -- und der Gewinn wäre weg. \T{Erst das Datenlayout
+prüfen, dann vektorisieren.}
+\end{falle}

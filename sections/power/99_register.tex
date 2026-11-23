@@ -1,0 +1,38 @@
+% !TEX root = ../../main_power.tex
+% ---------------------------------------------------------------------
+%  Stichwortregister -- vom Begriff zur Abschnittsnummer
+%  ERZEUGT von mkreg.py. Nicht von Hand aendern, sondern dort
+%  ergaenzen und neu laufen lassen.
+% ---------------------------------------------------------------------
+\section{Stichwortregister}
+
+\scriptsize
+\renewcommand{\arraystretch}{0.9}
+\begin{tabularx}{\linewidth}{@{}Xr@{\hskip4pt}Xr@{\hskip4pt}Xr@{}}
+$P_{total}$-Gleichung & \ref{form:ptotal} & Gear Shifting & \ref{rez:gearshift} & parasitäre Speisung & \ref{rez:gating} \\
+$V_{dd}$ quadratisch & \ref{form:ptotal} & Halbleiterfläche & \ref{sec:flaeche} & \R{PMC} & \ref{sec:flaeche} \\
+3.3\,V statt 5\,V & \ref{sec:pwrhw} & HardFault ohne Takt & \ref{rez:gearshift} & Pollen vs. Interrupt & \ref{sec:pwrsw} \\
+32-kHz-Quarz & \ref{falle:pwr} & \R{HSRUN} & \ref{rez:modi} & Power Gating & \ref{rez:gating} \\
+ADC-Fläche & \ref{sec:flaeche} & \R{ICG} & \ref{sec:flaeche} & Power Modes & \ref{rez:modi} \\
+Aktivitätsfaktor $\alpha$ & \ref{form:ptotal} & Idle Hook & \ref{rez:idlehook} & Processing-in-Memory & \ref{sec:ausblick} \\
+Anzeigen / Display & \ref{sec:pwrhw} & Idle Task & \ref{sec:rtospwr} & Scheduler beenden & \ref{rez:tickless} \\
+Aufwachzeit & \ref{falle:pwr} & In-System Programming & \ref{sec:kinetis} & Schwellspannung & \ref{sec:statisch} \\
+AWIC / LLWU & \ref{rez:modi} & Innenwiderstand & \ref{falle:pwr} & SD-Karte & \ref{sec:kinetis} \\
+Batterielaufzeit & \ref{sec:ref} & I\textsuperscript{2}C-Pulls & \ref{falle:pwr} & Selbstentladung & \ref{falle:pwr} \\
+Bauteilwahl & \ref{sec:pwrhw} & Kurzschlussstrom $I_{SC}$ & \ref{sec:dynamisch} & Semesterleistung & \ref{sec:ref} \\
+bi-stabile Anzeige & \ref{sec:pwrhw} & Ladungspumpe & \ref{sec:kinetis} & Sicherheitsgurt & \ref{sec:kinetis} \\
+\R{clkdiv1} & \ref{rez:gearshift} & Lastkapazität $C_{load}$ & \ref{sec:dynamisch} & Sleep-Strategie & \ref{sec:pwrsw} \\
+Clock Gating & \ref{rez:gating} & Leckstrom & \ref{sec:statisch} & Sprach-Effizienz & \ref{sec:pwrsw} \\
+\R{CLOCK\_EnableClock} & \ref{rez:gearshift} & Leistung $P=UI$ & \ref{sec:ref} & statischer Verbrauch & \ref{sec:statisch} \\
+Code-Dichte & \ref{sec:pwrsw} & \R{LinkServer measure} & \ref{sec:messen} & \R{SystemCoreClock} & \ref{rez:gearshift} \\
+Compiler-Optimierung & \ref{sec:pwrsw} & \R{LLS} / \R{VLLS} & \ref{rez:modi} & SysTick & \ref{rez:idlehook} \\
+Datenbewegung & \ref{sec:ausblick} & Look-up-Tabelle & \ref{sec:pwrsw} & Tickless Idle & \ref{rez:tickless} \\
+DevContainer & \ref{sec:messen} & Low Power vs. Low Energy & \ref{sec:pwr} & tinyK22 & \ref{sec:kinetis} \\
+\R{dsb/wfi/isb} & \ref{rez:idlehook} & MCU-Link Pro & \ref{sec:messen} & UART-Break & \ref{falle:pwr} \\
+dynamischer Verbrauch & \ref{sec:dynamisch} & Messbereich / Dynamik & \ref{falle:pwr} & unbenutzte Pins & \ref{falle:pwr} \\
+Enable-/Sleep-Pin & \ref{rez:gating} & Messwerte RUN/WAIT/STOP & \ref{sec:messen} & \R{VLPR VLPW VLPS} & \ref{rez:modi} \\
+Energie $E=\int P\,dt$ & \ref{sec:ref} & Miniaturisierung & \ref{sec:dynamisch} & \R{VREGIN} & \ref{sec:kinetis} \\
+\R{expectedIdleTicks} & \ref{rez:tickless} & MRAM / FRAM & \ref{sec:flaeche} & \R{wfi} & \ref{rez:modi} \\
+GDB-Server über TCP/IP & \ref{sec:messen} & NVIC (synchron) & \ref{rez:modi} & Z-Diode & \ref{falle:pwr} \\
+\end{tabularx}
+\normalsize

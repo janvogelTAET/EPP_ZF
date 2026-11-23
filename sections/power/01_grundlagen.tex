@@ -1,0 +1,94 @@
+% !TEX root = ../../main_power.tex
+% ---------------------------------------------------------------------
+%  Leistung und Energie -- die physikalische Grundlage (Teil 3)
+% ---------------------------------------------------------------------
+\section{Leistung und Energie}
+\label{sec:pwr}
+
+\begin{formel}[Die zwei Grundgleichungen]
+\[ P = U \cdot I \qquad
+   E = \int_0^T P(t)\,dt = \int_0^T I(t) \cdot V(t)\,dt \]
+\merkzeile Leistung ist ein \emph{Momentanwert}, Energie die
+\emph{Fläche darunter}. Ein Messgerät, das nur den Mittelwert zeigt,
+sagt nichts über Spitzen -- und umgekehrt.
+\end{formel}
+
+\SW{„Low Power“ ist nicht „Low Energy“} Die beiden Grössen beantworten
+verschiedene Fragen, und eine Massnahme kann die eine verbessern und die
+andere verschlechtern.
+\begin{ztab}{@{}lX@{}}
+Leistung & bestimmt das \emph{Design}: Speisung, Spannungsregler,
+  Leiterquerschnitte, Kühlung \\
+Energie & bestimmt den \emph{Betrieb}: Batteriekapazität, Energiekosten
+  (Solar, Weltraum), Kühlung (Platz und Kosten), Lebensdauer
+  (temperaturabhängig) \\
+\end{ztab}
+\merkzeile Darum lohnt sich „schnell rechnen und lange schlafen“: die
+Spitzenleistung steigt, die Energie sinkt trotzdem.
+
+\subsection{Statischer Verbrauch}
+\label{sec:statisch}
+Fliesst, \emph{ohne} dass geschaltet wird.
+\begin{itemize}
+\item Leck-/Kanalstrom von Source nach Drain
+\item Leckstrom durch die parasitäre Diode
+\item endlicher Widerstand des Halbleiters
+\end{itemize}
+\begin{falle}[Die Zwickmühle des statischen Verbrauchs]
+Gegenmittel ist die \T{angelegte Spannung senken}. Aber: reduzierte
+Spannung \ra längere Schaltzeiten. Will man die Schaltzeiten zurück,
+muss man die \T{Schaltspannung} (Schwellspannung) senken -- und dann
+steigt der Leckstrom \T{exponentiell}. Statischer Verbrauch lässt sich
+nicht wegoptimieren, nur verschieben.
+\end{falle}
+
+\subsection{Dynamischer Verbrauch}
+\label{sec:dynamisch}
+Fliesst nur \emph{beim} Schalten, hat drei Anteile:
+\begin{ztab}{@{}lX@{}}
+$I_{SW}$ & Laden und Entladen der Lastkapazität am Ausgang -- der
+  Hauptanteil \\
+$I_{SC}$ & Kurzschlussstrom: für kurze Zeit leiten \emph{beide}
+  Transistoren, weil die Schaltflanke nicht unendlich steil sein kann \\
+$I_{lk}$ & Leckstrom (siehe oben) \\
+\end{ztab}
+\begin{formel}[Warum Kapazität und Takt zählen]
+\[ I = \frac{dQ}{dt} = C \cdot \frac{dV}{dt} \]
+Der Strom ist proportional zur Kapazität $C$ \emph{und} zur
+Schaltgeschwindigkeit $dV/dt$. Bei Millionen von Transistoren, die alle
+geladen und entladen werden, summiert sich das.
+\end{formel}
+
+\SW{Trend} Kleinere Strukturen \ra kleinere Kapazitäten \ra dynamischer
+Verbrauch sinkt, \emph{statischer steigt}. Höhere Taktrate \ra
+dynamischer Verbrauch steigt, aber der Einfluss der Kapazität ist
+grösser. Das eigentliche Problem der Miniaturisierung sind die
+Leckströme: irgendwann kreuzen sich die beiden Kurven.
+
+\subsection{Die Gleichung, aus der alle Massnahmen folgen}
+\label{form:ptotal}
+\begin{formel}[Gesamtverbrauch]
+\[ P_{total} = \underbrace{\alpha\,C_{load}\,V_{dd}^{2}\,f}_{\text{dynamisch}}
+ + \underbrace{t_{SC}\,V_{dd}\,I_{peak}}_{\text{Kurzschluss}}
+ + \underbrace{V_{dd}\,I_{leak}}_{\text{statisch}} \]
+\end{formel}
+Jeder Faktor ist eine Stellschraube -- die ganze Vorlesung besteht
+daraus, sie einzeln anzuziehen:
+\begin{ztab}{@{}lX@{}}
+$V_{dd}$ & Speisespannung senken, abschalten, interne Spannung nutzen.
+  Wirkt \T{quadratisch} im dynamischen \emph{und} linear im statischen
+  Teil \ra die stärkste Schraube \\
+$C_{load}$ & Fläche, Anzahl Transistoren, kleinere Strukturen \\
+$\alpha,\ f$ & Taktfrequenz und Schaltfrequenz reduzieren, Glitches
+  vermeiden, schlafen. $\alpha$ ist der Anteil der Gatter, die pro Takt
+  wirklich umschalten \\
+$t_{SC}$ & steile Flanken \ra kürzerer Kurzschluss \\
+$I_{leak}$ & neue Halbleiter, Strukturen \emph{nicht} zu klein, gut
+  isolierende Materialien, Temperatur tief halten \\
+\end{ztab}
+\begin{bsp}[Was die Quadratur bringt]
+$V_{dd}$ von 3.3\,V auf 1.8\,V: der dynamische Anteil fällt auf
+$(1.8/3.3)^2 \approx 30\,\%$, der statische auf $55\,\%$. Halber Takt
+dagegen halbiert nur den dynamischen Anteil. Deshalb ist die erste
+Messaufgabe genau diese: Einfluss von $V_{dd}$ beim LPC804.
+\end{bsp}

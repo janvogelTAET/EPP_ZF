@@ -1,0 +1,38 @@
+% =====================================================================
+% EPP -- Zusammenfassung Teil "Docker"
+% MEP-Hilfsmittel: 4 A4-Seiten auf 2 Blaettern (doppelseitig)
+%
+% Bauen:  latexmk -pdf main_docker.tex
+% Layout, Farben, Boxen und eigene Befehle stehen in preamble.tex
+% und gelten fuer alle drei Zusammenfassungen.
+% =====================================================================
+\documentclass[8pt]{extarticle}
+
+\newcommand{\doctitle}{EPP Docker}
+\newcommand{\docsubject}{Docker}
+
+\input{preamble}
+
+% =====================================================================
+\begin{document}
+
+\begin{multicols*}{2}
+  {\centering
+   {\Large\bfseries \doctitle\par}\vspace{1pt}
+   {\footnotesize \docauthors \quad\textbullet\quad \docdate\par}}
+  \vspace{4pt}
+  \input{sections/docker/00_navigation}
+  \vspace{2pt}
+  \tableofcontents
+  \vspace{3pt}
+
+  \input{sections/docker/01_grundlagen}
+  \input{sections/docker/02_container}
+  \input{sections/docker/03_images}
+  \input{sections/docker/04_dockerfile}
+  \input{sections/docker/05_multistage}
+  \input{sections/docker/90_referenz}
+  \input{sections/docker/99_register}
+\end{multicols*}
+
+\end{document}

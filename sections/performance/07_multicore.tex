@@ -1,4 +1,4 @@
-% !TEX root = ../main.tex
+% !TEX root = ../../main_performance.tex
 % ---------------------------------------------------------------------
 %  Multicore
 % ---------------------------------------------------------------------
@@ -152,3 +152,134 @@ arm_acquire:               lr.w rd,(rs1)
   BNE     acquire
 \end{lstlisting}
 RISC-V zusätzlich \R{amoadd/amoswap/amoand/\dots} (Extension \R{A}).
+
+\subsection{Reentranz}
+\label{sec:reentranz}
+\begin{formel}[Die Regel]
+Eine Funktion ist \T{reentrant}, wenn zwei Instanzen gleichzeitig aktiv
+sein dürfen -- also wenn sie keinen Zustand ausserhalb ihres eigenen
+Stackframes anfasst. Nur reentranter Code darf von Tasks \emph{und} von
+mehreren Kernen geteilt werden.
+\end{formel}
+\begin{lstlisting}
+int temp;                   | void swap(int *x,int *y) {
+void swap(int *x, int *y) { |   int temp;      /* lokal! */
+  temp = *x;                |   temp = *x;
+  *x = *y;                  |   *x = *y;
+  *y = temp;                |   *y = temp;
+}  /* NICHT reentrant */    | }  /* reentrant */
+\end{lstlisting}
+Der einzige Unterschied ist, wo \R{temp} steht. Weitere Killer:
+\R{static}-Variablen, globale Puffer, nicht-reentrante
+Bibliotheksfunktionen (klassisch \R{strtok}, \R{printf} ohne
+Locking), und Hardware-Register, die als Zustand benutzt werden.
+
+\subsection{Mutual Exclusion: die Werkzeuge}
+\label{rez:mutex}
+\begin{ztab}{@{}lX@{}}
+\multicolumn{2}{@{}l}{\textbf{Kommunikation}}\\
+Mailbox & \emph{blockiert} -- ein Platz, Schreiber wartet, bis gelesen
+  wurde \\
+Message Queue & gepuffert, mehrere Nachrichten, Reihenfolge bleibt \\
+\addlinespace
+\multicolumn{2}{@{}l}{\textbf{Synchronisation}}\\
+Semaphor & Zähler („Bahnsignal“). \T{Counting Semaphore} verwaltet
+  mehrere gleichartige Ressourcen -- drei Restaurant-Toiletten: Zähler
+  3, jeder \R{Take} dekrementiert \\
+Mutex & \T{Mutual Exclusion}: binär \emph{und} mit Besitzer. Nur wer
+  genommen hat, darf zurückgeben \\
+Flags & Signalisierung ohne Datenübergabe \\
+\end{ztab}
+FreeRTOS kennt drei Semaphortypen: \T{binär}, \T{counting} und
+\T{Mutex}.
+
+\begin{falle}[Prioritätsinversion -- und warum Mutex $\ne$ Semaphor]
+Ein Task \emph{niedriger} Priorität hält ein Semaphor. Ein Task
+\emph{hoher} Priorität will es und blockiert. Jetzt verdrängt ein Task
+\emph{mittlerer} Priorität den niedrigen -- und damit indirekt auch den
+hohen. Der wichtigste Task wartet auf den unwichtigsten.\\[2pt]
+\T{Lösung} Der \T{Mutex} kennt seinen Besitzer und kann ihm deshalb
+vorübergehend die Priorität des Wartenden geben
+(\emph{priority inheritance}). Ein reiner Semaphor kann das nicht -- er
+weiss nicht, wer ihn hält.\\[2pt]
+\merkzeile Prominentestes Opfer: \T{Mars Pathfinder} 1997 -- der
+Watchdog setzte den Rover wiederholt zurück, weil genau diese Inversion
+auftrat.
+\end{falle}
+
+\begin{lstlisting}
+SemaphoreHandle_t mutex;
+mutex = xSemaphoreCreateMutex();        /* vor dem Scheduler */
+/* im Task: */
+xSemaphoreTake(mutex, portMAX_DELAY);   /* ... oder Timeout */
+  /* kritischer Abschnitt */
+xSemaphoreGive(mutex);
+\end{lstlisting}
+
+\SW{Die brutalen Alternativen} Scheduler anhalten, andere CPUs anhalten,
+Interrupts sperren, Caches flushen. Funktioniert, zerstört aber die
+Echtzeitfähigkeit -- und im Mehrkernfall reicht das Sperren der eigenen
+Interrupts ohnehin nicht.
+\begin{falle}[Einkern-Lösungen tragen nicht über Kerne]
+Auf einem Kern genügt es, Interrupts zu sperren oder den Scheduler
+anzuhalten -- das Betriebssystem ist dann nur einmal aktiv. Bei
+\emph{mehreren} Kernen läuft der andere Kern weiter. Semaphore und
+Mutex über Kernegrenzen brauchen deshalb \T{Hardware-Unterstützung}:
+den globalen Exclusive Monitor (\R{LDREX}/\R{STREX} bei ARM,
+\R{lr.w}/\R{sc.w} bei RISC-V) oder dedizierte Spinlocks.
+\end{falle}
+
+\subsection{SMP und AMP}
+\label{rez:smpamp}
+\begin{ztab}{@{}lX@{}}
+\T{SMP} & Symmetric Multiprocessing: \emph{ein} Betriebssystem verteilt
+  Tasks auf alle Kerne. Die Kerne sind gleichwertig, jeder Task kann
+  überall laufen \\
+\T{AMP} & Asymmetric: jeder Kern hat sein \emph{eigenes} Programm bzw.\
+  OS, Kommunikation über FIFOs/Shared Memory. Beim RP2350 nötig, wenn
+  ein Kern ARM und der andere RISC-V ist (zwei Images) \\
+\end{ztab}
+
+\begin{bsp}[FreeRTOS SMP auf dem RP2350]
+Zwei Kerne, ein FreeRTOS:
+\begin{lstlisting}
+configNUM_CORES              2  /* beide Kerne nutzen */
+configRUN_MULTIPLE_PRIORITIES 0 /* nur gleiche Prio gleichzeitig */
+configUSE_CORE_AFFINITY      1  /* vTaskCoreAffinity... aktiv */
+configUSE_PREEMPTION         1
+\end{lstlisting}
+\begin{lstlisting}
+xTaskCreate(vTaskSMP, "A", taskSize, NULL, 1, &handleA);
+xTaskCreate(vTaskSMP, "B", taskSize, NULL, 1, &handleB);
+xTaskCreate(vTaskSMP, "C", taskSize, NULL, 1, NULL);
+xTaskCreate(vTaskSMP, "D", taskSize, NULL, 1, NULL);
+vTaskCoreAffinitySet(handleA, (1 << 0));  /* A nur auf Core 0 */
+vTaskCoreAffinitySet(handleB, (1 << 1));  /* B nur auf Core 1 */
+vTaskStartScheduler();
+\end{lstlisting}
+\R{A} und \R{B} sind festgenagelt, \R{C} und \R{D} wandern. Im Task
+fragt man die eigene Lage ab mit \R{get\_core\_num()},
+\R{xTaskGetCurrentTaskHandle()} und \R{vTaskCoreAffinityGet()}.
+\end{bsp}
+\begin{falle}[\R{configRUN\_MULTIPLE\_PRIORITIES}]
+Steht es auf \T{0}, laufen \emph{nur Tasks gleicher Priorität}
+gleichzeitig auf beiden Kernen. Das verhindert, dass ein
+niederpriorer Task parallel zu einem hochprioren läuft und ihm
+Busbandbreite und Cache wegnimmt -- kostet aber Parallelität. Steht es
+auf 1, wird mehr parallel ausgeführt, die Prioritätssemantik ist aber
+nicht mehr die von einem Kern gewohnte.
+\end{falle}
+\begin{falle}[\R{printf} ist nicht reentrant]
+Zwei Kerne, die gleichzeitig \R{puts} aufrufen, produzieren
+verschränkten Buchstabensalat. Darum in jedem SMP-Beispiel ein
+Wrapper:
+\begin{lstlisting}
+void vSafePrint(char *out) {
+  xSemaphoreTake(mutex, portMAX_DELAY);
+  puts(out);
+  xSemaphoreGive(mutex);
+}
+\end{lstlisting}
+Das ist die praktische Anwendung von \ref{sec:reentranz} und
+\ref{rez:mutex} in drei Zeilen.
+\end{falle}

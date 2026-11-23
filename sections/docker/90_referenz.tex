@@ -1,0 +1,76 @@
+% !TEX root = ../../main_docker.tex
+% ---------------------------------------------------------------------
+%  Referenz: alle Kommandos und Dockerfile-Instruktionen auf einen Blick,
+%  plus die Rechnungen, die an der Pruefung drankommen koennen.
+% ---------------------------------------------------------------------
+\section{Referenz}
+\label{sec:ref}
+
+\subsection{Kommandos nach Aufgabe}
+\begin{ztab}{@{}lX@{}}
+\multicolumn{2}{@{}l}{\textbf{Images}}\\
+\R{images}, \R{images -a} & lokale Images, \R{-a} auch namenlose \\
+\R{pull <tag>} & Image holen, ohne zu starten \\
+\R{build . -t <tag>} & Image aus Dockerfile im Kontext \R{.} \\
+\R{build . -f <datei>} & anderes Dockerfile, Kontext bleibt \R{.} \\
+\R{build . --target <stufe>} & nur bis zu dieser Build-Stufe \\
+\R{history <image>} & Schichten mit Instruktion und Grösse \\
+\R{inspect <image>} & \R{RootFS.Layers}, \R{Config.Cmd}, \R{Config.Entrypoint} \\
+\R{tag <alt> <neu>} & zusätzlicher Name, Image bleibt dasselbe \\
+\R{rmi <image>} & Image löschen \\
+\R{image prune [-a]} & namenlose [bzw.\ alle unbenutzten] Images weg \\
+\R{login -u <user>} / \R{image push} & auf Docker Hub anmelden / hochladen \\
+\addlinespace
+\multicolumn{2}{@{}l}{\textbf{Container}}\\
+\R{run <image> [cmd]} & \emph{neuen} Container erzeugen und starten \\
+\quad\R{-it} & interaktiv mit Terminal \\
+\quad\R{-d} / \R{-itd} & im Hintergrund \\
+\quad\R{--rm} & nach dem Stoppen automatisch löschen \\
+\quad\R{--name <n>} & eigener Name statt Zufallsname \\
+\quad\R{-p <host>:<cnt>} & Port durchreichen \\
+\quad\R{-v <quelle>:<ziel>} & Volume einhängen \\
+\R{ps}, \R{ps -a}, \R{ps -a -{}-size} & laufende / alle / mit Platzbedarf \\
+\R{start}, \R{stop}, \R{restart} & vorhandenen Container steuern \\
+\R{attach <cnt>} & sich an einen laufenden Container hängen \\
+\R{exec -it <cnt> bash} & \emph{zusätzlichen} Prozess im Container \\
+\R{logs [-f] <cnt>} & Ausgabe des Hauptprozesses, \R{-f} mitlaufend \\
+\R{top <cnt>} & Prozesse im Container \\
+\R{cp <quelle> <ziel>} & Dateien Host $\leftrightarrow$ Container \\
+\R{commit <cnt> <tag>} & Container einfrieren $\to$ neues Image \\
+\R{rm <cnt>}, \R{container prune} & Container löschen / alle gestoppten \\
+\addlinespace
+\multicolumn{2}{@{}l}{\textbf{Volumes}}\\
+\R{volume ls}, \R{volume inspect} & anonyme und benannte Volumes \\
+\R{volume prune} & \textbf{löscht Daten} -- siehe Falle \ref{rez:volume} \\
+\end{ztab}
+
+\subsection{Dockerfile-Instruktionen}
+\begin{ztab}{@{}lXc@{}}
+ & Wirkung & Layer \\ \midrule
+\R{FROM} & Parent-Image, muss zuerst stehen; mehrfach $=$ mehrstufig & -- \\
+\R{COPY} & Datei/Verzeichnis aus dem Kontext ins Image & ja \\
+\R{ADD} & wie \R{COPY}, packt Archive aus & ja \\
+\R{RUN} & Kommando im entstehenden Image ausführen & ja\,$^*$ \\
+\R{WORKDIR} & Arbeitsverzeichnis, wird angelegt & ja \\
+\R{ENV} & Umgebungsvariable & -- \\
+\R{CMD} & Standard-Kommando \emph{oder} Argumente für ENTRYPOINT & -- \\
+\R{ENTRYPOINT} & festes Kommando, Argumente werden angehängt & -- \\
+\end{ztab}
+$^*$ nur wenn es das Dateisystem ändert: \R{RUN echo "x" > f} schon,
+\R{RUN echo "x"} nicht.
+
+\subsection{Drei Rechnungen}
+\begin{bsp}[Was an der Prüfung gerechnet wird]
+\textbf{(a) Platzbedarf.} Ein Image von 118 MB, drei Container darauf,
+die je 2 MB Logfiles schreiben: auf der Platte liegen
+$118 + 3\cdot 2 = 124$ MB, nicht $3\cdot 118$. \R{docker ps -a -{}-size}
+zeigt pro Container nur die 2 MB (\R{SIZE}) und daneben die Image-Grösse
+als \R{virtual}.\\[2pt]
+\textbf{(b) Layer zählen.} Jede Zeile, die das Dateisystem ändert, zählt --
+einschliesslich des Parent-Images. \R{FROM debian} (1) $+$ \R{RUN apt-get
+update} (2) $+$ \R{RUN apt-get install} (3) $=$ 3 Layer; die beiden
+\R{RUN} mit \R{\&\&} verbunden $=$ 2 Layer \emph{und} kleiner.\\[2pt]
+\textbf{(c) Tag ausschreiben.} \R{nginx} meint vollständig
+\R{index.docker.io/library/nginx:latest} -- Repository, Source
+(\R{library} $=$ offiziell), Name, Tag.
+\end{bsp}

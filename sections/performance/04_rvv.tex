@@ -1,4 +1,4 @@
-% !TEX root = ../main.tex
+% !TEX root = ../../main_performance.tex
 % ---------------------------------------------------------------------
 %  RISC-V Vektorerweiterung
 % ---------------------------------------------------------------------
@@ -69,3 +69,43 @@ FP64 & -- & \R{.d} \\
 \end{ztab}
 Die RVV-Erweiterung behebt also genau die vier Schwachstellen, die bei
 NEON in Abschnitt~\ref{sec:simdgrenzen} als Grenzen stehen.
+
+\subsection{Warum das VL-Konzept besser ist als feste Breite}
+\label{form:vla}
+\begin{formel}[Vector-Length Agnostic]
+Dasselbe Binary läuft auf Hardware mit 128, 512 oder 2048 Bit
+Vektorbreite -- \R{vsetvl} liefert zur Laufzeit, wie viele Elemente
+diese Maschine kann. Bei NEON ist die Breite \emph{im Befehl codiert};
+neue Hardware braucht neuen Code.
+\end{formel}
+\begin{ztab}{@{}lXX@{}}
+ & ARM NEON & RISC-V \R{V} \\ \midrule
+Breite & fest 64/128\,Bit im Befehl & \R{MAXVL} der Implementierung \\
+Tail & von Hand: Rest skalar nachrechnen & \R{vsetvl} regelt es, letzte
+  Iteration automatisch kürzer \\
+Portabilität & Code an die Breite gebunden & dasselbe Binary skaliert \\
+Zugriffsmuster & \R{VLDn} de-interleaved fest & \T{strided} und
+  \T{indexed} (gather/scatter) frei \\
+\end{ztab}
+\begin{bsp}[Strip Mining: die Schleife, die sich selbst anpasst]
+\begin{lstlisting}
+loop:
+  vsetvli t0, a0, e32   # t0 = min(a0, MAXVL) fuer 32-Bit-Elemente
+  vle32.v v0, (a1)      # t0 Elemente laden
+  ...                   # rechnen
+  vse32.v v0, (a2)      # t0 Elemente speichern
+  sub  a0, a0, t0       # Restzaehler verringern
+  slli t1, t0, 2        # t0 * 4 Byte
+  add  a1, a1, t1       # Zeiger weiter
+  add  a2, a2, t1
+  bnez a0, loop
+\end{lstlisting}
+Bei 1000 Elementen und \R{MAXVL}$=8$: 125 Durchläufe à 8.
+Bei 1003 Elementen: 125 à 8 und ein letzter à 3 -- \emph{ohne}
+Sonderbehandlung im Code. Genau das muss man bei NEON von Hand
+schreiben.
+\end{bsp}
+\SW{Gather/Scatter} \T{Strided} lädt jedes $n$-te Element (Spalte einer
+Matrix, Kanal eines Interleaved-Buffers), \T{indexed} nimmt einen
+Vektor von Indizes -- damit wird \R{a[idx[i]]} vektorisierbar, was bei
+NEON gar nicht geht.

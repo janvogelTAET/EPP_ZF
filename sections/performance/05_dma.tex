@@ -1,4 +1,4 @@
-% !TEX root = ../main.tex
+% !TEX root = ../../main_performance.tex
 % ---------------------------------------------------------------------
 %  DMA
 % ---------------------------------------------------------------------
@@ -112,18 +112,6 @@ DMALP 16
 DMALPEND
 DMAEND
 \end{lstlisting}
-
-\begin{rezept}[Rezept: \R{CCR} dekodieren]
-\label{rez:ccr}
-\R{S}/\R{D} $=$ Source/Destination, \R{B}$n$ $=$ Burst Length (Beats),
-\R{S}$m$ $=$ Burst Size (Bit pro Beat).
-\begin{enumerate}
-\item Bytes pro \R{DMALD} $=n\times m/8$
-\item Gesamtmenge $=$ Bytes pro Burst $\times$ Schleifenzahl
-\item Prüfen, ob Quell- und Zielseite gleich viel bewegen
-\end{enumerate}
-Oben: $4\times64/8=32$\,B, $16\times32=\T{512\,B}$.
-\end{rezept}
 
 \begin{falle}[„Loop fits in one cache line (4 I-words)“]
 Der Schleifenkörper hat genau 4 Instruktionen \ra einmal geholt,
@@ -253,3 +241,75 @@ Komplexität & hoch & mittel & niedrig \\
 Drei Punkte auf dem Spektrum Zustandsmaschine\,$\leftrightarrow$\,Prozessor.
 \emph{Alle drei lösen dasselbe Problem} -- wer Falle 2 verstanden hat,
 kann sich jede der drei Lösungen herleiten.
+
+\subsection{PL330: der Befehlssatz}
+\label{rez:pl330isa}
+\begin{ztab}{@{}lX@{}}
+\R{DMAMOV CCR, <cfg>} & Kanalkonfiguration setzen: Burstlänge und
+  Busbreite für Quelle und Ziel \\
+\R{DMAMOV SAR, <adr>} & Quelladresse (physisch!) \\
+\R{DMAMOV DAR, <adr>} & Zieladresse \\
+\R{DMALD} & Laden: so viele Beats $\times$ so viele Bit, wie \R{SB}/\R{SS}
+  in \R{CCR} sagen \ra in den MFIFO \\
+\R{DMAST} & Speichern: Beats $\times$ Bit nach \R{DB}/\R{DS} \\
+\R{DMALP <n>} \dots \R{DMALPEND} & Schleife, $n$ Durchläufe \\
+\R{DMAWFP} & Wait For Peripheral: auf \R{DREQ} warten \\
+\R{DMASEV} & Event/Interrupt an die CPU auslösen \\
+\R{DMAFLUSHP} & Peripherie-Handshake zurücksetzen \\
+\R{DMAEND} & Kanal beenden \\
+\R{DMAGO} & (von der CPU) Kanal mit einem Programm starten \\
+\end{ztab}
+
+\SW{Was den PL330 besonders macht}
+\begin{itemize}
+\item \T{8 Kanäle} $=$ Threads mit Round-Robin-Arbitrierung, alle mit
+      gleicher Priorität
+\item eigener \T{I-Cache}: 8 Lines à 4 Worte -- während eine Cache Line
+      nachgeladen wird, darf ein \emph{anderer} Kanal rechnen
+\item \T{MFIFO}: $128 \times 64$\,Bit, von allen Kanälen geteilt
+\item \R{DMALD}/\R{DMAST} haben eine Queue von $2\times16$ Worten und
+      \T{aggregieren auf 64\,Bit}, wo möglich
+\item 8 Interrupts oder Polling; Secure/Non-Secure-Register über einen
+      32-Bit-APB-Slave
+\end{itemize}
+
+\begin{bsp}[Dasselbe Ziel, zwei Programme]
+\T{(a) Quelle und Ziel können beide bursten:}
+\begin{lstlisting}
+DMAMOV CCR, SB4 SS64 DB4 DS64
+DMAMOV SAR, 0x1000
+DMAMOV DAR, 0x4000
+DMALP 16
+  DMALD        # 4 x 64 Bit laden  = 32 B
+  DMAST        # 4 x 64 Bit ablegen
+DMALPEND
+DMAEND         # 16 * 32 B = 512 B
+\end{lstlisting}
+\T{(b) Quelle kann nicht bursten} (\R{SB1}), Ziel schon (\R{DB4}) --
+dann müssen vier Einzel-Loads einen Burst-Store füllen:
+\begin{lstlisting}
+DMAMOV CCR, SB1 SS64 DB4 DS64
+DMALP 16
+  DMALD        # je 1 x 64 Bit
+  DMALD
+  DMALD
+  DMALD        # erst jetzt sind 4 Beats im MFIFO
+  DMAST        # 4 x 64 Bit auf einmal
+DMALPEND
+\end{lstlisting}
+\end{bsp}
+\begin{rezept}[\R{CCR} dekodieren und Bytes zählen]
+\label{rez:ccr}
+\begin{enumerate}
+\item \R{SB}$n$ $=$ Source Burst, $n$ Beats; \R{SS}$m$ $=$ Source Size,
+      $m$ Bit pro Beat. Analog \R{DB}/\R{DS} fürs Ziel.
+\item Bytes pro \R{DMALD} $= n_{SB} \cdot m_{SS}/8$,
+      pro \R{DMAST} $= n_{DB} \cdot m_{DS}/8$.
+\item \T{Die beiden müssen übereinstimmen} -- sonst läuft der MFIFO
+      leer oder über. Stimmen sie nicht, so viele \R{DMALD} bzw.\
+      \R{DMAST} wiederholen, bis es aufgeht (siehe Beispiel b).
+\item Gesamtmenge $=$ Bytes pro Durchlauf $\times$ \R{DMALP}-Zähler.
+\end{enumerate}
+\merkzeile Prüfen, ob der Schleifenkörper in eine I-Cache-Line
+(4 Worte) passt -- sonst lädt der DMAC mitten im Transfer nach.
+\end{rezept}

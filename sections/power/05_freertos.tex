@@ -1,0 +1,71 @@
+% !TEX root = ../../main_power.tex
+% ---------------------------------------------------------------------
+%  FreeRTOS und Low Power (Teil 6)
+% ---------------------------------------------------------------------
+\section{FreeRTOS und Low Power}
+\label{sec:rtospwr}
+
+\SW{Ausgangslage} FreeRTOS hat immer einen \T{Idle Task} mit der
+niedrigsten Priorität. Er läuft, wenn kein anderer Task bereit ist --
+also genau dann, wenn der Prozessor schlafen könnte, stattdessen aber in
+einer Endlosschleife Strom verbrennt.
+
+\subsection{Idle Hook}
+\label{rez:idlehook}
+Der Idle Task ruft optional bei jedem Durchlauf eine eigene Funktion auf.
+Dort gehört der Übergang in den Low-Power-Modus hin.
+\begin{lstlisting}
+#define configUSE_IDLE_HOOK      1
+#define configUSE_IDLE_HOOK_NAME McuRTOS_vApplicationIdleHook
+
+void McuRTOS_vApplicationIdleHook(void) {
+  __asm volatile("dsb");  /* Speicherzugriffe abschliessen */
+  __asm volatile("wfi");  /* Wait For Interrupt -> schlafen */
+  __asm volatile("isb");  /* Pipeline leeren */
+}
+\end{lstlisting}
+\merkzeile Die Reihenfolge \R{dsb} -- \R{wfi} -- \R{isb} ist kein
+Zufall: erst alle ausstehenden Speicherzugriffe abschliessen, dann
+schlafen legen, nach dem Aufwachen die Pipeline neu füllen.
+
+\begin{falle}[Der Tick weckt den Schläfer wieder]
+Der \T{SysTick} läuft weiter und unterbricht den Idle Task bei jedem
+Tick. Gemessen bei 1\,ms Tick: der Prozessor schläft jeweils nur
+\T{978\,\textmu s}, wacht aber \T{1000-mal pro Sekunde} auf -- und jedes
+Aufwachen kostet Zeit und Energie. Der Idle Hook allein holt deshalb nur
+einen Teil des möglichen Gewinns.
+\end{falle}
+
+\subsection{Tickless Idle}
+\label{rez:tickless}
+FreeRTOS schaltet den Tick-Interrupt für die Dauer der erwarteten
+Leerlaufzeit ganz ab und korrigiert den Tick-Zähler nach dem Aufwachen.
+\begin{lstlisting}
+#define configUSE_TICKLESS_IDLE  1
+
+void McuRTOS_vApplicationIdleHook(void) {
+  #if !configUSE_TICKLESS_IDLE   /* sonst doppelt */
+  __asm volatile("dsb"); __asm volatile("wfi"); __asm volatile("isb");
+  #endif
+}
+
+void McuRTOS_vOnPreSleepProcessing(TickType_t expectedIdleTicks) {
+  __asm volatile("dsb");
+  __asm volatile("wfi");
+  __asm volatile("isb");
+}
+\end{lstlisting}
+\merkzeile Ergebnis in der Trace-Ansicht: der Idle Task wird
+\emph{nicht mehr unterbrochen} -- ein einziger langer Schlaf statt
+tausend kurzer. \R{expectedIdleTicks} sagt, wie lange geschlafen werden
+darf; danach muss ein Timer rechtzeitig wecken.
+
+\begin{ztab}{@{}lX@{}}
+\multicolumn{2}{@{}l}{\textbf{Die drei Stufen, aufsteigend sparsam}}\\
+nichts & Idle Task dreht leer, voller \R{RUN}-Verbrauch \\
+Idle Hook & schläft zwischen den Ticks, wacht $1/t_{tick}$-mal pro
+  Sekunde \\
+Tickless Idle & schläft über viele Ticks hinweg am Stück \\
+Scheduler beenden & letzte Möglichkeit, wenn gar nichts mehr laufen
+  soll \\
+\end{ztab}

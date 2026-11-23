@@ -1,0 +1,128 @@
+% !TEX root = ../../main_docker.tex
+% Dateisystem, Volumes, Images
+
+\section{Dateisystem, Volumes, Repositories}
+\label{sec:fs}
+
+\subsection{Das geschichtete Container-Dateisystem}
+\label{sec:overlay}
+Das virtuelle Dateisystem eines Containers besteht aus übereinander
+gelegten Schichten:
+\begin{ztab}{@{}lX@{}}
+oben & \T{Container-Layer}, read-write -- die Änderungen \\
+Mitte & weitere \emph{Image}-Schichten: nachinstallierte Software,
+  Webserver, DB, dotnet \dots{} \\
+unten & \T{Base-Image}, meist ein minimales Linux (Ubuntu, Debian) \\
+\end{ztab}
+Alle Schichten ausser der obersten sind \T{read-only}.
+\T{Jeder Container bekommt seinen eigenen Container-Layer} -- auch mehrere
+aus demselben Image. Der Layer wird \emph{mit} dem Container gelöscht.
+\merkzeile Praktisch für reinen Tisch (temporäre Dateien verschwinden),
+unpraktisch für Software, die Daten dauerhaft speichern muss.
+
+\SW{Wo das physisch liegt} \R{/var/lib/docker/overlay2/\dots} und
+\R{/var/lib/containerd/\dots}. Suchen mit
+\R{sudo find /var/lib/ -name <datei>}.
+
+\begin{falle}[Zwei Beobachtungen dazu]
+1.~Bei einem \emph{laufenden} Container findet \R{find} die Datei
+\T{zweimal} (docker und containerd), bei einem gestoppten nur einmal.\\
+2.~Diese Verzeichnisse werden von Docker verwaltet und dürfen
+\textbf{nie} direkt verändert werden.
+\end{falle}
+
+\subsection{Volumes}
+\label{rez:volume}
+Ein Volume bildet einen Pfad des Host-Dateisystems in das
+Container-Dateisystem ab. Änderungen sind auf beiden Seiten sofort
+sichtbar, und die Dateien \T{überleben das Löschen des Containers} --
+alles andere im Container-Layer nicht.
+
+\begin{ztab}{@{}lX@{}}
+\T{Host Volume} & \R{-v /pfad/im/host:/pfad/im/cnt} -- Nutzer bestimmt
+  beide Seiten \\
+\T{Anonymes V.} & \R{-v /pfad/im/cnt} -- Docker legt das Host-Verzeichnis
+  unter \R{/var/lib/docker/volumes/<hash>/\_data/} an; kaum gebraucht \\
+\T{Named Volume} & \R{-v name:/pfad/im/cnt} -- wie anonym, aber mit Namen \\
+\end{ztab}
+
+\begin{bsp}[Wofür Volumes wirklich da sind]
+Versions-Update eines Datenbankservers: Die containerisierte DB legt ihre
+Daten im Volume ab. Beim Update wird der alte Container gestoppt und
+gelöscht -- die Daten bleiben. Der neue Container aus dem aktuellen Image
+greift auf dieselben Daten zu.
+\end{bsp}
+
+\SW{Administration} \R{docker volume ls} $\cdot$
+\R{docker volume rm <vol>} $\cdot$ \R{docker volume prune}.
+Volumes überleben ihren Container, müssen also von Hand aufgeräumt werden.
+
+\begin{falle}[Warum \R{volume prune} trügerisch ist]
+Es löscht \emph{alle} Volumes, die gerade keinem Container zugeordnet
+sind. Genau die wertvollen Daten eines Volumes, dessen Container du
+versehentlich schon gelöscht hast, sind damit weg -- und es gibt
+\textbf{kein} Docker-Kommando, um vorher den Inhalt eines Volumes
+anzusehen.
+\end{falle}
+
+\subsection{Image aus Container: \R{docker commit}}
+\begin{lstlisting}
+docker commit <container> <image>
+\end{lstlisting}
+Friert die Änderungen eines laufenden oder gestoppten Containers als neue
+Image-Schicht ein. Damit lässt sich manuell installierte Software in ein
+Image übernehmen: Ubuntu starten $\to$ \R{apt install nano} $\to$
+\R{commit} $\to$ das neue Image enthält nano.
+\merkzeile Das ist die Antwort auf „Kann aus einem Container ein Image
+erzeugt werden?“ -- ja, mit \R{commit}. Der saubere Weg bleibt aber das
+Dockerfile.
+
+\subsection{Repositories und Docker Hub}
+\label{rez:tag}
+\T{Docker Hub} ist das Standard-Repository: \R{docker run} und
+\R{docker pull} holen Images von dort. Öffentliche Repositories sind für
+jeden zugänglich, private nur für den Besitzer (bei Docker Hub ab einer
+gewissen Anzahl kostenpflichtig) -- oder on premise mit eigener
+Repository-Software (CNCF Distribution).
+
+\begin{ztab}{@{}lX@{}}
+\R{docker search <begriff>} & Images suchen; Spalten \R{STARS},
+  \R{OFFICIAL}, \R{AUTOMATED}. Offizielle Images sind vertrauenswürdiger. \\
+\R{docker pull <img>} & herunterladen, ohne zu starten \\
+\end{ztab}
+
+\begin{formel}[Aufbau eines Image-Namens]
+\begin{center}\ttfamily
+<repo>/<source>/<image>:<tag>
+\end{center}
+\begin{tabularx}{\linewidth}{@{}lX@{}}
+\R{<image>} & der Name, z.\,B. \R{ubuntu}, \R{hello-world} \\
+\R{<source>} & Nutzer oder Organisation auf Docker Hub;
+  Standard \R{library} (die offiziellen Images) \\
+\R{<tag>} & die Version; Standard \R{latest} \\
+\R{<repo>} & die Registry; Standard \R{index.docker.io} \\
+\end{tabularx}\\[2pt]
+Also ist \R{docker run hello-world} identisch mit\\
+\R{docker run index.docker.io/library/hello-world:latest}.\\
+Weitere Beispiele: \R{ubuntu:jammy} (22.04),
+\R{kaohslu/epp-demo}, \R{mcr.microsoft.com/dotnet/runtime:5.0}.
+\end{formel}
+
+\begin{falle}[\R{run} aktualisiert nicht]
+\R{docker run <img>} nimmt die \T{neueste lokal vorhandene} Version --
+auch wenn im Repository längst eine neuere liegt. Nur \R{docker pull}
+holt die aktuelle.\\
+Und beim \R{pull}: Das alte Image wird \emph{nicht} überschrieben,
+sondern verliert nur seinen Tag und erscheint mit \R{<none>}
+(\emph{dangling image}) -- Container könnten es noch brauchen.
+\end{falle}
+
+\subsection{Der Weg eines eigenen Images}
+\begin{lstlisting}
+docker build -t <user>/<name> .   # Image bauen und taggen
+docker login -u <user>            # an Docker Hub anmelden
+docker image push <user>/<name>   # hochladen
+docker run <user>/<name>          # auf beliebigem Host starten
+\end{lstlisting}
+Drei Zeilen zum Veröffentlichen, eine zum Benutzen -- ohne dass auf dem
+Zielrechner irgendeine Laufzeitumgebung installiert sein muss.

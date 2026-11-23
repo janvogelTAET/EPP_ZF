@@ -1,4 +1,4 @@
-% !TEX root = ../main.tex
+% !TEX root = ../../main_performance.tex
 % ---------------------------------------------------------------------
 %  Speicherhierarchie und Cache
 % ---------------------------------------------------------------------
@@ -138,3 +138,69 @@ Mehrstufig von innen nach aussen verschachteln.
 gegenüber 100 Cycles ohne Cache. Die Kurve kippt brutal, sobald L1 von
 95 auf 90\,\% fällt.
 \end{bsp}
+
+\subsection{Die Speicherpyramide in Zahlen}
+\label{rez:pyramide}
+Raspberry Pi 5, Cortex-A76 (ARMv8-A) -- die Zahlen, mit denen man AMAT
+rechnet und Grössenordnungen begründet:
+\begin{ztab}{@{}lrr@{}}
+Ebene & Grösse & Latenz \\ \midrule
+GP-Register & $4\times13\times8$\,B & \T{1 Cycle} \\
+L1 (4$\times$D $+$ 4$\times$I) & $8\times 1024\times 64$\,B $=8\times$64\,kB,
+  4-way & \T{4 Cycles} \\
+L2 (4$\times$, privat) & $8\times$512\,kB, 8-way & \T{11 Cycles} \\
+L3 (shared) & 2\,MB, 16-way & \T{35 Cycles} \\
+RAM & $128M\times32$\,B $=4$\,GB LPDDR4X & \T{$\sim$100 Cycles} \\
+SD-Karte (virt.\ Speicher) & $32M\times4$\,kB $=128$\,GB & \T{$\sim$100\,000
+  Cycles} \\
+\end{ztab}
+\begin{formel}[Die Grössenordnungen, die man im Kopf haben muss]
+Register \ra L1: Faktor 4. L1 \ra RAM: Faktor \T{25}.
+RAM \ra Platte: Faktor \T{1000}.\\
+Darum ist ein L1-Miss ärgerlich, ein RAM-Zugriff teuer und ein
+\T{Page Fault eine Katastrophe} -- bei 100\,000 Cycles lohnt es sich,
+den ganzen Task zu wechseln, statt zu warten.
+\end{formel}
+\merkzeile \T{Typische Hit Rate: 66--99\,\%.} Für eine belastbare
+Aussage muss man ein \emph{statistisch repräsentatives} Codestück
+messen, nicht ein Mikrobenchmark.
+\merkzeile Eine 64-B-Line fasst bei 32-Bit-Befehlen \T{16 Instruktionen}
+(der Pi-4-Folie: 8 Instruktionen bei 64-Bit-Befehlen) -- deshalb wirkt
+räumliche Lokalität bei Code fast automatisch.
+
+\subsection{Mapping-Arten durchgerechnet}
+\label{bsp:mapping}
+\begin{bsp}[Dieselben 8 Lines, drei Organisationen]
+512\,B Cache, 64-B-Lines \ra 8 Lines. 16-Bit-Adressen.
+\begin{ztab}{@{}lXX@{}}
+ & Index & Tag \\ \midrule
+direct mapped & 3\,Bit (8 Sets à 1) & $16-3-6=7$\,Bit \\
+2-way & 2\,Bit (4 Sets à 2) & $16-2-6=8$\,Bit \\
+4-way & 1\,Bit (2 Sets à 4) & $16-1-6=9$\,Bit \\
+fully assoc. & 0\,Bit (1 Set à 8) & $16-0-6=\T{10\,Bit}$ \\
+\end{ztab}
+\merkzeile Je assoziativer, desto \emph{grösser} der Tag und desto
+teurer der Vergleich -- voll assoziativ braucht 8 parallele Komparatoren
+(CAM). Das ist der Preis für die Freiheit bei der Platzierung.
+\end{bsp}
+
+\begin{bsp}[Trashing: wann genau es knallt]
+Direct mapped, 8\,kB, 64-B-Lines \ra 128 Sets, Index $=$ A12:A6.
+Zwei Adressen landen im selben Set, wenn sie sich in A12:A6 \emph{nicht}
+unterscheiden, also wenn ihr Abstand ein Vielfaches von
+$128 \cdot 64 = 8192 = \T{8\,kB}$ ist.\\[2pt]
+Klassischer Fall: zwei Arrays à 8\,kB hintereinander im Speicher, in
+derselben Schleife elementweise verknüpft (\R{c[i] = a[i] + b[i]}).
+\R{a[i]} und \R{b[i]} haben konstant 8\,kB Abstand \ra \emph{jeder}
+Zugriff wirft den anderen hinaus. Hit Rate 0\,\%, obwohl die Daten
+zusammen nur 16\,kB gross sind und der Cache 8\,kB hat.\\[2pt]
+\T{Abhilfe} (a) 2-way oder höher -- dann passen beide ins selbe Set;
+(b) \T{Padding}: ein Array um eine Line versetzen, dann verschieben sich
+die Indizes; (c) Schleife blocken.
+\end{bsp}
+\begin{formel}[Trashing-Abstand allgemein]
+\[ d = k \cdot \frac{\text{Cachegrösse}}{\text{Assoziativität}} \]
+Bei direct mapped ($=$1-way) ist das die ganze Cachegrösse. Bei $n$-way
+darf man $n$ solche Adressen gleichzeitig halten -- der $(n{+}1)$-te
+verdrängt.
+\end{formel}

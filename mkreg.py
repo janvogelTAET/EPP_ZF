@@ -1,35 +1,67 @@
 #!/usr/bin/env python3
-# Generiert sections/10_register.tex: alphabetisch sortiert, zweispaltig.
-import unicodedata, sys
+# -*- coding: utf-8 -*-
+"""Erzeugt die Stichwortregister der drei Zusammenfassungen.
 
-E = [
-    ("Base-Image", "sec:docker"),
-    ("Container-Layer", "sec:docker"),
-    ("dangling image", "sec:docker"),
-    ("detached (-d)", "sec:docker"),
-    (r"\R{docker commit}", "sec:docker"),
-    (r"\R{docker cp}", "sec:docker"),
-    (r"\R{docker exec}", "sec:docker"),
-    (r"\R{docker logs}", "sec:docker"),
-    (r"\R{docker pull}", "sec:docker"),
-    (r"\R{docker search}", "sec:docker"),
-    (r"\R{docker top}", "sec:docker"),
-    ("Image-Name / Tag", "sec:docker"),
-    (r"\R{latest}", "sec:docker"),
-    ("Named Volume", "sec:docker"),
-    (r"\R{volume prune}", "sec:docker"),
-    ("Attach / Detach", "sec:docker"),
-    ("apt (Container)", "sec:docker"),
-    ("Container", "sec:docker"),
-    ("Docker Hub", "sec:docker"),
-    (r"\R{docker ps}", "sec:docker"),
-    (r"\R{docker run}", "sec:docker"),
-    ("Image (Docker)", "sec:docker"),
-    (r"\R{-it}", "sec:docker"),
-    ("Lebenszyklus", "sec:docker"),
-    ("Overlay-FS", "sec:docker"),
-    (r"\R{prune}", "sec:docker"),
-    ("Volume", "sec:docker"),
+    python3 -I mkreg.py performance   ->  sections/performance/99_register.tex
+    python3 -I mkreg.py docker        ->  sections/docker/99_register.tex
+    python3 -I mkreg.py power         ->  sections/power/99_register.tex
+    python3 -I mkreg.py all           ->  alle drei
+
+Neue Begriffe unten in der passenden Liste ergaenzen, Skript neu laufen
+lassen. Sortiert wird automatisch; die Reihenfolge in der Liste egal.
+"""
+import unicodedata
+import sys
+import os
+
+# --- Spaltenpaare pro Dokument (Platz knapp? hier hoeher) ---------------
+NCOL = {"performance": 3, "docker": 3, "power": 3}
+
+REG = {}
+
+REG["performance"] = [
+    ("Befehlsformate (RV32I)", "rez:format"),
+    (r"\R{funct3} / \R{funct7}", "rez:format"),
+    ("Green Card", "rez:greencard"),
+    (r"\R{CSR}", "rez:greencard"),
+    ("Speicherpyramide", "rez:pyramide"),
+    ("Latenzen (Cycles)", "rez:pyramide"),
+    ("Hit Rate", "rez:pyramide"),
+    ("Matrixmultiplikation", "bsp:matmul"),
+    (r"\R{vfmaq\_laneq}", "bsp:matmul"),
+    ("column-major", "bsp:matmul"),
+    ("De-Interleaving", "bsp:vld3"),
+    (r"\R{vld3\_u8}", "bsp:vld3"),
+    ("Registerdruck", "sec:neon"),
+    ("PIO-Instruktionen", "rez:pio"),
+    (r"\R{OSR} / \R{ISR}", "rez:pio"),
+    (r"\R{clkdiv}", "rez:pio"),
+    (r"\R{.wrap} / side-set", "rez:pio"),
+    ("Adressübersetzung", "rez:mmutrans"),
+    ("Page Fault", "rez:mmutrans"),
+    ("Mapping-Arten", "bsp:mapping"),
+    ("Trashing", "bsp:mapping"),
+    ("Padding", "bsp:mapping"),
+    ("CAM (fully assoc.)", "bsp:mapping"),
+    ("Körnung (fine/coarse)", "rez:koernung"),
+    ("Routing-Delay", "rez:koernung"),
+    ("LUT", "rez:koernung"),
+    ("Reentranz", "sec:reentranz"),
+    ("Mutex vs. Semaphor", "rez:mutex"),
+    ("Prioritätsinversion", "rez:mutex"),
+    ("Mailbox / Queue", "rez:mutex"),
+    ("Mars Pathfinder", "rez:mutex"),
+    ("SMP / AMP", "rez:smpamp"),
+    ("Core Affinity", "rez:smpamp"),
+    (r"\R{configNUM\_CORES}", "rez:smpamp"),
+    ("Vector-Length Agnostic", "form:vla"),
+    ("Strip Mining", "form:vla"),
+    ("Gather / Scatter", "form:vla"),
+    (r"\R{DMALD} / \R{DMAST}", "rez:pl330isa"),
+    ("PL330-Befehlssatz", "rez:pl330isa"),
+    ("MFIFO", "rez:pl330isa"),
+    ("Prüfungsstrategie", "sec:referenz"),
+    ("verwechselte Begriffe", "sec:referenz"),
     ("Adresszerlegung", "rez:zerlegung"),
     ("AMAT", "form:amat"),
     ("Amdahl", "form:amdahl"),
@@ -122,6 +154,161 @@ E = [
     ("Wrapping (PIO)", "sec:reconfig"),
 ]
 
+REG["docker"] = [
+    ("Image vs. Container", "sec:docker"),
+    ("Host", "sec:docker"),
+    ("Kapselung", "sec:docker"),
+    ("Container-Layer", "sec:docker"),
+    ("Base-/Parent-Image", "sec:multistage"),
+    ("Overlay-Dateisystem", "sec:overlay"),
+    ("copy-up", "sec:overlay"),
+    ("whiteout", "sec:overlay"),
+    ("Lebenszyklus", "sec:cnt"),
+    (r"\R{docker run}", "sec:cnt"),
+    (r"\R{docker ps}", "sec:cnt"),
+    (r"\R{-it}", "sec:cnt"),
+    (r"detached (\R{-d})", "sec:cnt"),
+    (r"\R{--rm}", "sec:cnt"),
+    ("Beenden vs. Trennen", "sec:beenden"),
+    ("Ctrl-p Ctrl-q", "sec:beenden"),
+    (r"\R{docker attach}", "sec:beenden"),
+    (r"\R{docker exec}", "sec:cnt"),
+    (r"\R{docker logs}", "sec:cnt"),
+    (r"\R{docker top}", "sec:cnt"),
+    (r"\R{docker cp}", "sec:cnt"),
+    ("Image-Grösse", "rez:groesse"),
+    ("Platzbedarf rechnen", "sec:ref"),
+    ("schlanke Images", "rez:groesse"),
+    ("Volumes", "rez:volume"),
+    ("Host Volume", "rez:volume"),
+    ("anonymes Volume", "rez:volume"),
+    ("Named Volume", "rez:volume"),
+    (r"\R{volume prune}", "rez:volume"),
+    (r"\R{docker commit}", "sec:fs"),
+    ("Repository", "rez:tag"),
+    ("Docker Hub", "rez:tag"),
+    ("Image-Name / Tag", "rez:tag"),
+    (r"\R{latest}", "rez:tag"),
+    (r"\R{library}", "rez:tag"),
+    (r"\R{docker pull}", "rez:tag"),
+    (r"\R{docker push}", "sec:ref"),
+    (r"\R{docker search}", "rez:tag"),
+    ("Dockerfile", "sec:dockerfile"),
+    ("Build-Kontext", "sec:dockerfile"),
+    (r"\R{-f} (Dockerfile)", "sec:dockerfile"),
+    ("Build-Cache", "rez:layer"),
+    (r"\R{FROM}", "sec:dockerfile"),
+    (r"\R{COPY}", "sec:dockerfile"),
+    (r"\R{ADD}", "sec:dockerfile"),
+    (r"\R{RUN}", "sec:dockerfile"),
+    (r"\R{WORKDIR}", "form:entrypoint"),
+    (r"\R{apt-get} vs. \R{apt}", "sec:dockerfile"),
+    ("Shell- vs. Exec-Form", "sec:dockerfile"),
+    ("Layer zählen", "rez:layer"),
+    (r"\R{docker history}", "rez:layer"),
+    (r"\R{docker inspect}", "rez:layer"),
+    (r"\R{RootFS.Layers}", "rez:layer"),
+    (r"\R{CMD}", "form:entrypoint"),
+    (r"\R{ENTRYPOINT}", "form:entrypoint"),
+    ("Startkommando", "form:entrypoint"),
+    ("dangling image", "sec:multistage"),
+    (r"\R{image prune}", "sec:multistage"),
+    (r"\R{docker tag}", "sec:multistage"),
+    ("Multi-stage Build", "rez:multistage"),
+    (r"\R{COPY --from}", "rez:multistage"),
+    (r"\R{--target}", "rez:multistage"),
+    (r"\R{scratch}", "sec:multistage"),
+    ("Alpine", "sec:multistage"),
+    ("Debian", "sec:multistage"),
+    (r"\R{apk}", "sec:multistage"),
+    ("busybox", "sec:multistage"),
+    ("Linken statisch/dyn.", "sec:linken"),
+    (r"\R{gcc -static}", "sec:linken"),
+    (r"\R{ldd}", "sec:linken"),
+    ("libc", "sec:linken"),
+    ("glibc", "sec:linken"),
+    ("musl", "sec:linken"),
+    ("shared library", "sec:linken"),
+]
+
+REG["power"] = [
+    ("Leistung $P=UI$", "sec:ref"),
+    (r"Energie $E=\int P\,dt$", "sec:ref"),
+    ("Low Power vs. Low Energy", "sec:pwr"),
+    ("Batterielaufzeit", "sec:ref"),
+    ("statischer Verbrauch", "sec:statisch"),
+    ("Leckstrom", "sec:statisch"),
+    ("Schwellspannung", "sec:statisch"),
+    ("dynamischer Verbrauch", "sec:dynamisch"),
+    ("Kurzschlussstrom $I_{SC}$", "sec:dynamisch"),
+    ("Lastkapazität $C_{load}$", "sec:dynamisch"),
+    ("Miniaturisierung", "sec:dynamisch"),
+    ("$P_{total}$-Gleichung", "form:ptotal"),
+    (r"Aktivitätsfaktor $\alpha$", "form:ptotal"),
+    ("$V_{dd}$ quadratisch", "form:ptotal"),
+    ("Power Gating", "rez:gating"),
+    ("Clock Gating", "rez:gating"),
+    ("parasitäre Speisung", "rez:gating"),
+    ("Enable-/Sleep-Pin", "rez:gating"),
+    ("Bauteilwahl", "sec:pwrhw"),
+    (r"3.3\,V statt 5\,V", "sec:pwrhw"),
+    ("Anzeigen / Display", "sec:pwrhw"),
+    ("bi-stabile Anzeige", "sec:pwrhw"),
+    ("Halbleiterfläche", "sec:flaeche"),
+    ("MRAM / FRAM", "sec:flaeche"),
+    (r"\R{ICG}", "sec:flaeche"),
+    (r"\R{PMC}", "sec:flaeche"),
+    ("ADC-Fläche", "sec:flaeche"),
+    ("Sleep-Strategie", "sec:pwrsw"),
+    ("Gear Shifting", "rez:gearshift"),
+    ("Pollen vs. Interrupt", "sec:pwrsw"),
+    ("Look-up-Tabelle", "sec:pwrsw"),
+    ("Code-Dichte", "sec:pwrsw"),
+    ("Compiler-Optimierung", "sec:pwrsw"),
+    ("Sprach-Effizienz", "sec:pwrsw"),
+    ("Aufwachzeit", "falle:pwr"),
+    ("32-kHz-Quarz", "falle:pwr"),
+    ("Messbereich / Dynamik", "falle:pwr"),
+    ("Innenwiderstand", "falle:pwr"),
+    ("UART-Break", "falle:pwr"),
+    (r"I\textsuperscript{2}C-Pulls", "falle:pwr"),
+    ("unbenutzte Pins", "falle:pwr"),
+    ("Z-Diode", "falle:pwr"),
+    ("Selbstentladung", "falle:pwr"),
+    ("Sicherheitsgurt", "sec:kinetis"),
+    ("tinyK22", "sec:kinetis"),
+    (r"\R{VREGIN}", "sec:kinetis"),
+    ("SD-Karte", "sec:kinetis"),
+    ("In-System Programming", "sec:kinetis"),
+    ("Ladungspumpe", "sec:kinetis"),
+    (r"\R{HSRUN}", "rez:modi"),
+    (r"\R{CLOCK\_EnableClock}", "rez:gearshift"),
+    ("HardFault ohne Takt", "rez:gearshift"),
+    (r"\R{SystemCoreClock}", "rez:gearshift"),
+    (r"\R{clkdiv1}", "rez:gearshift"),
+    ("Power Modes", "rez:modi"),
+    (r"\R{wfi}", "rez:modi"),
+    ("NVIC (synchron)", "rez:modi"),
+    ("AWIC / LLWU", "rez:modi"),
+    (r"\R{VLPR VLPW VLPS}", "rez:modi"),
+    (r"\R{LLS} / \R{VLLS}", "rez:modi"),
+    ("Idle Task", "sec:rtospwr"),
+    ("Idle Hook", "rez:idlehook"),
+    (r"\R{dsb/wfi/isb}", "rez:idlehook"),
+    ("SysTick", "rez:idlehook"),
+    ("Tickless Idle", "rez:tickless"),
+    (r"\R{expectedIdleTicks}", "rez:tickless"),
+    ("Scheduler beenden", "rez:tickless"),
+    ("MCU-Link Pro", "sec:messen"),
+    (r"\R{LinkServer measure}", "sec:messen"),
+    ("Messwerte RUN/WAIT/STOP", "sec:messen"),
+    ("DevContainer", "sec:messen"),
+    ("GDB-Server über TCP/IP", "sec:messen"),
+    ("Datenbewegung", "sec:ausblick"),
+    ("Processing-in-Memory", "sec:ausblick"),
+    ("Semesterleistung", "sec:ref"),
+]
+
 
 def key(label):
     """Sortierschluessel: LaTeX-Markup weg, Umlaute normalisieren."""
@@ -133,29 +320,39 @@ def key(label):
     return s.upper()
 
 
-E.sort(key=lambda p: key(p[0]))
-NCOL = 3
-rows = -(-len(E) // NCOL)
-cols = [E[i*rows:(i+1)*rows] for i in range(NCOL)]
-cols = [c + [("", "")] * (rows - len(c)) for c in cols]
+def build(doc):
+    entries = sorted(REG[doc], key=lambda p: key(p[0]))
+    ncol = NCOL[doc]
+    rows = -(-len(entries) // ncol)
+    cols = [entries[i * rows:(i + 1) * rows] for i in range(ncol)]
+    cols = [c + [("", "")] * (rows - len(c)) for c in cols]
 
-out = [
-    "% !TEX root = ../main.tex",
-    "% ---------------------------------------------------------------------",
-    "%  Stichwortregister -- vom Begriff zur Abschnittsnummer",
-    "%  ERZEUGT von mkreg.py. Neue Eintraege dort ergaenzen und neu laufen",
-    "%  lassen, oder hier von Hand alphabetisch einsortieren.",
-    "% ---------------------------------------------------------------------",
-    r"\section{Stichwortregister}",
-    "",
-    r"\scriptsize",
-    r"\begin{tabularx}{\linewidth}{@{}" + "Xr@{\\hskip4pt}" * (NCOL - 1) + "Xr@{}}",
-]
-for row in zip(*cols):
-    cells = [f"{lab} & \\ref{{{ref}}}" if lab else " & " for lab, ref in row]
-    out.append(" & ".join(cells) + " \\\\")
-out += [r"\end{tabularx}", r"\normalsize", ""]
+    out = [
+        "%% !TEX root = ../../main_%s.tex" % doc,
+        "% ---------------------------------------------------------------------",
+        "%  Stichwortregister -- vom Begriff zur Abschnittsnummer",
+        "%  ERZEUGT von mkreg.py. Nicht von Hand aendern, sondern dort",
+        "%  ergaenzen und neu laufen lassen.",
+        "% ---------------------------------------------------------------------",
+        r"\section{Stichwortregister}",
+        "",
+        r"\scriptsize",
+        r"\renewcommand{\arraystretch}{0.9}",
+        r"\begin{tabularx}{\linewidth}{@{}" + "Xr@{\\hskip4pt}" * (ncol - 1) + "Xr@{}}",
+    ]
+    for row in zip(*cols):
+        cells = ["%s & \\ref{%s}" % (lab, ref) if lab else " & " for lab, ref in row]
+        out.append(" & ".join(cells) + " \\\\")
+    out += [r"\end{tabularx}", r"\normalsize", ""]
 
-with open(sys.argv[1], "w", encoding="utf-8") as f:
-    f.write("\n".join(out))
-print(f"{len(E)} Eintraege, {rows} Zeilen, {NCOL} Spaltenpaare")
+    path = os.path.join("sections", doc, "99_register.tex")
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("\n".join(out))
+    print("%-12s %3d Eintraege, %2d Zeilen, %d Spaltenpaare -> %s"
+          % (doc, len(entries), rows, ncol, path))
+
+
+if __name__ == "__main__":
+    which = sys.argv[1] if len(sys.argv) > 1 else "all"
+    for doc in (REG if which == "all" else [which]):
+        build(doc)

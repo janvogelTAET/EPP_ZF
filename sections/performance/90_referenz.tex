@@ -1,0 +1,208 @@
+% !TEX root = ../../main_performance.tex
+% ---------------------------------------------------------------------
+%  Referenz: Formeln, Rezepte, durchgerechnete Beispiele
+% ---------------------------------------------------------------------
+\section{Formeln \& durchgerechnete Beispiele}
+\label{sec:referenz}
+
+\subsection{Alle Formeln auf einen Blick}
+\begin{ztab}{@{}lX@{}}
+Adresszerlegung & $\#\text{Sets}=\frac{\text{Cache}}{\text{Line}\cdot\text{Assoz.}}$,
+  Offset $=\log_2(\text{Line})$, Index $=\log_2(\#\text{Sets})$ \\
+AMAT & $t_{\text{Hit}}+\text{MissRate}\cdot\text{MissPenalty}$ \\
+Amdahl & $S=\dfrac{1}{(1-p)+p/s}$ \quad ($s$: Lanes \emph{oder} Kerne) \\
+Bandbreite & Takt $\times$ Busbreite in Byte \\
+Trashing-Abstand & $k\cdot\frac{\text{Cachegrösse}}{\text{Assoziativität}}$ \\
+Page Table 1-stufig & $2^{\text{VPN-Bits}}\times$ Eintragsgrösse \\
+PL330-Burst & $n_{\text{Beats}}\times m_{\text{Bit}}/8$ Byte je \R{DMALD} \\
+CGRA-Latenz & Summe der Stufen entlang des Datenpfads \\
+\end{ztab}
+
+\subsection{Durchgerechnete Beispiele}
+\begin{bsp}[Sieben Rechnungen, wie sie in der Prüfung drankommen]
+\T{(a) Adresszerlegung.} 32\,kB Cache, 32\,B Lines, 8-way, 32-Bit-Adresse.
+$\#\text{Sets}=\frac{32768}{32\cdot8}=128$ \ra Offset $=\log_232=5$\,Bit
+(A4:A0), Index $=\log_2128=7$\,Bit (A11:A5), Tag $=32-7-5=\T{20\,Bit}$.
+
+\T{(b) Trashing konstruieren.} Direct mapped, 8\,kB, 64\,B Lines
+\ra 128 Lines, Index $=$ A12:A6. Kollision, wenn der Abstand ein
+Vielfaches der Cachegrösse ist: \R{0x0000} und \R{0x2000} -- gleicher
+Index, verschiedene Tags.
+
+\T{(c) AMAT zweistufig.} $t_{L1}=4$, MissRate$_{L1}=10\,\%$, $t_{L2}=12$,
+MissRate$_{L2}=25\,\%$, RAM $=120$:
+$4+0.1\,(12+0.25\cdot120)=\T{8.2 Cycles}$.
+
+\T{(d) Amdahl mit Datentypwahl.} 90\,\% vektorisierbar.
+\R{float} (4 Lanes): $1/(0.1+0.9/4)=\T{3.08}\times$;
+\R{uint8} (16 Lanes): $1/(0.1+0.9/16)=\T{6.4}\times$.
+\ra Die Datentypwahl verdoppelt den Speedup, der Code bleibt gleich.
+
+\T{(e) PL330-CCR.} \R{SB8 SS32 DB4 DS64} mit \R{DMALP 32}: Quelle
+$8\cdot32/8=32$\,B, Ziel $4\cdot64/8=32$\,B -- passt. Gesamt
+$32\cdot32=\T{1024\,B}$. Schleifenkörper 4 Instruktionen \ra passt in
+eine I-Cache-Line.
+
+\T{(f) \R{TI} für UART-TX} (mem\,\ra\,Peripherie, 32\,Bit):
+\R{SRC\_INC}$=1$, \R{DEST\_INC}$=\mathbf{0}$, \R{DEST\_DREQ}$=1$,
+\R{SRC\_DREQ}$=0$, \R{PERMAP}$=$ UART-Nr., \R{WIDTH}$=32$, \R{INTEN}$=1$.
+
+\T{(g) Zynq-DMA-Bandbreite.} CPU\_6x $=$ 800\,MHz, 1:3 \ra CPU\_2x $=$
+266\,MHz, Interconnect 64\,Bit $=$ 8\,B: $266\cdot8=\T{2.13\,GB/s}$
+(Slave-Interconnect 32\,Bit: $\sim$1.07\,GB/s).
+\end{bsp}
+
+\subsection{Weitere durchgerechnete Beispiele}
+\begin{bsp}[(h) Cache-Hit-Rate aus einer Schleife]
+\R{float a[1024]} (4\,kB), 64-B-Lines, Schleife liest \R{a[i]}
+aufsteigend. Pro Line passen $64/4 = 16$ Floats: der erste Zugriff ist
+ein Miss, die nächsten 15 sind Hits \ra Hit Rate $=15/16 = \T{93.75\,\%}$,
+unabhängig von der Cachegrösse (solange die Line reinpasst).\\
+Dieselbe Schleife mit Schrittweite 16 (\R{a[16*i]}): jeder Zugriff
+trifft eine neue Line \ra \T{0\,\% Hit Rate}, 16$\times$ mehr
+Speicherverkehr bei gleichem Rechenergebnis.
+\end{bsp}
+
+\begin{bsp}[(i) Zeilen- gegen spaltenweise Durchlauf]
+Matrix $1024\times1024$ \R{float}, zeilenweise im Speicher,
+64-B-Lines, L1 $=$ 32\,kB.\\
+\T{Zeilenweise} \R{a[i][j]} in $j$: 16 Floats pro Line, 15 von 16
+Zugriffen sind Hits.\\
+\T{Spaltenweise} \R{a[i][j]} in $i$: aufeinanderfolgende Zugriffe liegen
+4096\,B auseinander \ra jedes Mal eine neue Line, und bis $i$ wieder bei
+0 ist, sind $1024 \cdot 64\,\text{B} = 64\,$kB durchgelaufen -- mehr als
+L1. \T{Jeder} Zugriff ist ein Miss.\\[2pt]
+\merkzeile Faktor 16 im Speicherverkehr, nur weil zwei Schleifen
+vertauscht sind. Das ist Lab 1.
+\end{bsp}
+
+\begin{bsp}[(j) Write-Through gegen Write-Back zählen]
+Eine Line wird 10-mal beschrieben, dann verdrängt.\\
+\T{Write-Through:} 10 Schreibzugriffe auf den nächsten Level.\\
+\T{Write-Back:} 0 während der Zugriffe, \T{1} beim Verdrängen (Dirty
+Bit gesetzt).\\
+Wird sie nie beschrieben, schreibt Write-Back \emph{gar nicht} zurück --
+das Dirty Bit entscheidet. Preis: nach einem Absturz ist der RAM-Inhalt
+veraltet, und DMA sieht die Daten nicht (\ref{falle:dma}).
+\end{bsp}
+
+\begin{bsp}[(k) Speedup und das Ende der Fahnenstange]
+90\,\% vektorisierbar, beliebig viele Lanes:
+$S_{max} = 1/(1-0.9) = \T{10}\times$ -- mehr geht nie, egal wie breit
+die Hardware wird. Mit 4 Lanes erreicht man 3.08, mit 16 Lanes 6.4, mit
+64 Lanes 8.8.\\
+\merkzeile Die ersten Lanes bringen am meisten. Deshalb lohnt es sich
+mehr, $p$ zu erhöhen (mehr Code vektorisieren), als $s$
+(breitere Hardware) -- dieselbe Logik gilt für Kerne.
+\end{bsp}
+
+\begin{bsp}[(l) Lohnt sich DMA überhaupt?]
+4\,kB von Peripherie in den RAM, 32-Bit-Zugriffe.\\
+\T{CPU:} 1024 Transfers à (Load $+$ Store) $\approx$ 2048 Befehle, plus
+Warten auf die Peripherie -- die CPU ist die ganze Zeit blockiert.\\
+\T{DMA:} ein paar Register schreiben, \R{DMAGO}, dann Interrupt. Die CPU
+ist für die Dauer frei.\\
+\merkzeile Die Rechnung kippt bei \emph{kleinen} Transfers: Setup kostet
+Dutzende Takte. Unter etwa 100\,B ist die CPU schneller. Dasselbe
+Amortisationsargument wie bei Cache Line und Burst.
+\end{bsp}
+
+\begin{bsp}[(m) PIO-Takt ausrechnen]
+Gewünscht: 1\,MHz Rechteck, Programm braucht 4 Takte pro Periode,
+Systemtakt 125\,MHz.\\
+Nötiger SM-Takt $= 4\,\text{MHz}$ \ra Teiler $= 125/4 = 31.25$.\\
+\R{clkdiv} als 16.16-Festkomma: $31.25 \cdot 2^{16} = \R{0x001F4000}$.
+\end{bsp}
+
+\subsection{Querschnitt: dasselbe Problem, fünf Antworten}
+\begin{ztab}{@{}lX@{}}
+\multicolumn{2}{@{}l}{\textbf{„Die CPU wartet auf den Speicher“}}\\
+Cache & schnellen Speicher davorsetzen (P1) \\
+Prefetch/Line & mehr auf einmal holen (P1) \\
+DMA & gar nicht erst die CPU fragen (P3) \\
+SIMD & pro Zugriff mehr rechnen (P2) \\
+PIM & im Speicher selbst rechnen (P6) \\
+\addlinespace
+\multicolumn{2}{@{}l}{\textbf{„Zwei Instanzen greifen auf dasselbe zu“}}\\
+Cache-Kohärenz & Hardware-Protokoll zwischen Kernen (P5) \\
+Cache vs.\ DMA & clean/invalidate von Hand (P3) \\
+Mutex & gegenseitiger Ausschluss in Software (P5) \\
+Spinlock & Hardware-Unterstützung im SIO (P5) \\
+Reentranz & das Problem gar nicht entstehen lassen (P5) \\
+\end{ztab}
+
+\subsection{Die vier durchgehenden Muster}
+\begin{description}
+\item[Overhead amortisieren] Cache Line, AXI-Burst, SIMD-Lane, Loop
+  Unrolling -- viermal dasselbe Argument: eine feste Startgebühr auf
+  möglichst viele Nutzdaten verteilen.
+\item[Kleiner schneller Speicher vor grossem langsamem] L1/RAM,
+  TLB/Page Table, PL330-I-Cache -- immer dieselbe Struktur (Tag, Valid,
+  Miss, Replacement), nur die Zeitskalen verschieben sich um Faktor 1000.
+\item[Prädikation statt Verzweigung] NEON-Masken (räumlich, über Lanes),
+  PL330-\R{B}/\R{S}-Suffixe (zeitlich, über Instruktionen).
+\item[Die Kette] P1 baut die Hierarchie $\;\to\;$ P2 macht die CPU
+  schneller und verschärft damit das Speicherproblem $\;\to\;$ P3 nimmt
+  der CPU das Datenschaufeln ab $\;\to\;$ P4 vereinfacht den Kern
+  $\;\to\;$ P5 vervielfacht ihn und zahlt mit Kohärenz $\;\to\;$ P6
+  verlagert die Arbeit ganz aus der CPU heraus.
+\end{description}
+
+\subsection{Begriffe, die verwechselt werden}
+\begin{ztab}{@{}lX@{}}
+Cache Line / Page & Line $=$ Übertragungseinheit Cache$\leftrightarrow$RAM
+  (64\,B). Page $=$ Übersetzungseinheit MMU (4\,kB). Beide haben Tag,
+  Valid und Miss -- aber verschiedene Zwecke und Zeitskalen \\
+Index / Tag & Index \emph{wählt} das Set (wird nicht gespeichert),
+  Tag \emph{identifiziert} die Line im Set (wird gespeichert) \\
+MPU / MMU & MPU schützt nur Bereiche (Cortex-M/R), \T{keine
+  Übersetzung}. MMU übersetzt \emph{und} schützt (Cortex-A) \ra nur mit
+  MMU gibt es virtuellen Speicher \\
+TLB / Cache & TLB cacht \emph{Übersetzungen}, nicht Daten.
+  Ein TLB-Hit kann trotzdem ein Cache-Miss sein \\
+clean / invalidate & \T{clean} $=$ Dirty-Daten in den RAM schreiben
+  (vor DMA-Lesen). \T{invalidate} $=$ Cache-Inhalt verwerfen (nach
+  DMA-Schreiben). Falsche Richtung $=$ stille Datenkorruption \\
+Lane / Register & Eine Lane ist ein \emph{Element} im Vektorregister.
+  „4 Lanes“ heisst 4 parallele Rechenwerke, nicht 4 Register \\
+Q / D / S & ARMv7: \R{Q0}$=$128\,Bit $=$ \R{D0}$+$\R{D1}$=$\R{S0..S3}
+  -- \emph{dieselben Bits}, nicht zusätzliche Register. AArch64 hat 32
+  echte \R{V}-Register \\
+vertikal / horizontal & Vertikal $=$ Lane $n$ mit Lane $n$ (schnell).
+  Horizontal $=$ über Lanes hinweg (langsam, nur am Schleifenende) \\
+Semaphor / Mutex & Mutex kennt seinen \emph{Besitzer} und kann
+  Priorität vererben. Semaphor zählt nur \\
+Burst / Beat & Ein Burst besteht aus $n$ Beats. \R{SB4 SS64} $=$
+  4 Beats à 64\,Bit $=$ 32\,B pro Burst \\
+SMP / AMP & SMP: ein OS, viele Kerne. AMP: je Kern ein Programm \\
+FPGA / CGRA & FPGA konfiguriert auf \emph{Bit}-Ebene (LUT), CGRA auf
+  \emph{Wort}-Ebene (ALU) \\
+\end{ztab}
+
+\subsection{Prüfungsstrategie}
+\begin{rezept}[Vorgehen bei einer Rechenaufgabe]
+\begin{enumerate}
+\item \T{Einheiten zuerst} -- Bit oder Byte? Die Folien verwechseln das
+      selbst (P3 Folie 5). Busbreite ist in Bit, Transfermengen in Byte.
+\item \T{Zweierpotenzen notieren}: $2^{10}=1$k, $2^{20}=1$M.
+      Jedes $\log_2$ in der Aufgabe ist nur ein Abzählen von Nullen.
+\item \T{Probe machen}: Tag $+$ Index $+$ Offset $=$ Adressbreite.
+      Quell-Bytes $=$ Ziel-Bytes. Summe der Anteile bei Amdahl $=1$.
+\item \T{Grössenordnung prüfen}: GB/s bei Bussen, Cycles bei Latenzen,
+      Faktoren $<$ Lane-Zahl bei Speedup. Ein Speedup grösser als die
+      Lane-Zahl ist immer ein Rechenfehler.
+\end{enumerate}
+\end{rezept}
+\begin{rezept}[Vorgehen bei „warum ist das langsam“]
+Der Reihe nach durchgehen -- es ist fast immer eines davon:
+\begin{enumerate}
+\item \T{Zugriffsmuster}: Schrittweite $>$ Cache Line? Spaltenweise
+      statt zeilenweise? \ra \ref{bsp:mapping}
+\item \T{Trashing}: Abstand ein Vielfaches von Cachegrösse/Assoziativität?
+\item \T{Datenabhängigkeit}: verhindert Vektorisierung
+      \ra \ref{sec:simdgrenzen}
+\item \T{Horizontale Operation in der Schleife} \ra \ref{sec:neon}
+\item \T{Falsche Granularität}: zu kleine DMA-Transfers, zu kurze Bursts
+\item \T{Amdahl}: der serielle Rest dominiert \ra \ref{form:amdahl}
+\end{enumerate}
+\end{rezept}

@@ -1,0 +1,57 @@
+% !TEX root = ../../main_performance.tex
+% ---------------------------------------------------------------------
+%  Stichwortregister -- vom Begriff zur Abschnittsnummer
+%  ERZEUGT von mkreg.py. Nicht von Hand aendern, sondern dort
+%  ergaenzen und neu laufen lassen.
+% ---------------------------------------------------------------------
+\section{Stichwortregister}
+
+\scriptsize
+\renewcommand{\arraystretch}{0.9}
+\begin{tabularx}{\linewidth}{@{}Xr@{\hskip4pt}Xr@{\hskip4pt}Xr@{}}
+\R{.wrap} / side-set & \ref{rez:pio} & Index & \ref{rez:zerlegung} & Prüfungsstrategie & \ref{sec:referenz} \\
+Adressübersetzung & \ref{rez:mmutrans} & Intrinsics & \ref{sec:neon} & Race Condition & \ref{sec:kohaerenz} \\
+Adresszerlegung & \ref{rez:zerlegung} & Kohär. Cache & \ref{falle:dma} & Reentranz & \ref{sec:reentranz} \\
+AMAT & \ref{form:amat} & Kohär. Multicore & \ref{sec:kohaerenz} & Reentranz & \ref{sec:multicore} \\
+Amdahl & \ref{form:amdahl} & Körnung (fine/coarse) & \ref{rez:koernung} & Registerdruck & \ref{sec:neon} \\
+Assoziativität & \ref{sec:cache} & Lanes & \ref{sec:neon} & Replacement & \ref{sec:cache} \\
+Autopull/-push & \ref{sec:reconfig} & Latenzen (Cycles) & \ref{rez:pyramide} & Ringpuffer (HW) & \ref{sec:dma} \\
+AXI-Burst & \ref{sec:dma} & Locality & \ref{sec:cache} & RISC-Prinzip. & \ref{sec:riscv} \\
+Bandbreite & \ref{form:bw} & Loop Peeling & \ref{sec:dma} & Routing-Delay & \ref{rez:koernung} \\
+Befehlsformate (RV32I) & \ref{rez:format} & Loop Unrolling & \ref{sec:neon} & Routing-Delay & \ref{sec:reconfig} \\
+\R{BR}/\R{BG} & \ref{sec:dma} & LRU & \ref{sec:cache} & RV32C & \ref{sec:riscv} \\
+\R{BSWAP} & \ref{sec:dma} & LUT & \ref{rez:koernung} & Sättigung (Q) & \ref{rez:neondecode} \\
+Cache Line & \ref{sec:cache} & MAC / \R{VMLA} & \ref{sec:neon} & Scatter-Gath. & \ref{falle:dma} \\
+CAM & \ref{sec:cache} & Mailbox & \ref{sec:kohaerenz} & Semaphore & \ref{sec:kohaerenz} \\
+CAM (fully assoc.) & \ref{bsp:mapping} & Mailbox / Queue & \ref{rez:mutex} & Shape L/W/N & \ref{rez:neondecode} \\
+\R{CCR} & \ref{rez:ccr} & Mapping-Arten & \ref{bsp:mapping} & Side-Set & \ref{sec:reconfig} \\
+CGRA & \ref{sec:cgra} & Mars Pathfinder & \ref{rez:mutex} & SIO & \ref{sec:multicore} \\
+\R{CHAIN\_TO} & \ref{sec:dma} & Maske (\R{VBSL}) & \ref{sec:neon} & \R{SLTU} & \ref{sec:rvflags} \\
+\R{clkdiv} & \ref{rez:pio} & Matrixmult. & \ref{sec:neon} & SMP / AMP & \ref{rez:smpamp} \\
+column-major & \ref{bsp:matmul} & Matrixmultiplikation & \ref{bsp:matmul} & SMP / AMP & \ref{sec:multicore} \\
+\R{configNUM\_CORES} & \ref{rez:smpamp} & MFIFO & \ref{rez:pl330isa} & Speicherpyramide & \ref{rez:pyramide} \\
+Control Block & \ref{rez:ti} & MFIFO & \ref{sec:dma} & Spinlock & \ref{sec:multicore} \\
+Copy-on-write & \ref{sec:mmu} & MMU & \ref{sec:mmu} & \R{SRC\_INC} & \ref{rez:ti} \\
+Core Affinity & \ref{rez:smpamp} & MPU & \ref{sec:mmu} & Strip Mining & \ref{form:vla} \\
+\R{CPACR} & \ref{sec:neon} & Mutex & \ref{sec:kohaerenz} & Strip Mining & \ref{sec:rvv} \\
+CRC im DMA & \ref{sec:dma} & Mutex vs. Semaphor & \ref{rez:mutex} & Swapping & \ref{sec:mmu} \\
+\R{CSR} & \ref{rez:greencard} & \R{NEXTCONBK} & \ref{rez:ti} & Tag & \ref{rez:zerlegung} \\
+Cycle Stealing & \ref{sec:dma} & NMRU & \ref{sec:cache} & Tail-Handling & \ref{sec:simdgrenzen} \\
+De-Interleaving & \ref{bsp:vld3} & Offset & \ref{rez:zerlegung} & \R{TI}-Register & \ref{rez:ti} \\
+Dirty Bit & \ref{sec:cache} & \R{OSR} / \R{ISR} & \ref{rez:pio} & TLB & \ref{sec:mmu} \\
+\R{DMALD} / \R{DMAST} & \ref{rez:pl330isa} & Padding & \ref{bsp:mapping} & Trashing & \ref{bsp:mapping} \\
+\R{DMAWFP} & \ref{sec:dma} & Page Fault & \ref{rez:mmutrans} & Trashing & \ref{bsp:trash} \\
+Doorbell & \ref{sec:multicore} & Page Fault & \ref{sec:mmu} & Valid Bit & \ref{sec:cache} \\
+DREQ / TREQ & \ref{sec:dma} & Page Table & \ref{sec:mmu} & VALID/READY & \ref{sec:dma} \\
+Excl. Monitor & \ref{sec:multicore} & Pairwise & \ref{sec:neon} & Vector-Length Agnostic & \ref{form:vla} \\
+Flags (fehlen) & \ref{sec:rvflags} & Panic-Signal & \ref{sec:dma} & Vektorlänge VL & \ref{sec:rvv} \\
+\R{FPEXC} & \ref{sec:neon} & \R{PERMAP} & \ref{rez:ti} & verwechselte Begriffe & \ref{sec:referenz} \\
+FPGA / LUT & \ref{sec:reconfig} & PIO & \ref{sec:reconfig} & \R{vfmaq\_laneq} & \ref{bsp:matmul} \\
+FreeRTOS-API & \ref{sec:multicore} & PIO-Instruktionen & \ref{rez:pio} & \R{VLD3} & \ref{sec:neon} \\
+\R{funct3} / \R{funct7} & \ref{rez:format} & PL330 & \ref{sec:dma} & \R{vld3\_u8} & \ref{bsp:vld3} \\
+Gather / Scatter & \ref{form:vla} & PL330-Befehlssatz & \ref{rez:pl330isa} & \R{vm\_stat} & \ref{sec:mmu} \\
+Green Card & \ref{rez:greencard} & Prädikation & \ref{sec:neon} & \R{vsetvl} & \ref{sec:rvv} \\
+Harvard & \ref{sec:cache} & Prio-Inversion & \ref{sec:kohaerenz} & Wrapping (PIO) & \ref{sec:reconfig} \\
+Hit Rate & \ref{rez:pyramide} & Prioritätsinversion & \ref{rez:mutex} & Write-Back & \ref{sec:cache} \\
+\end{tabularx}
+\normalsize

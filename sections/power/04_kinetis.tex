@@ -1,0 +1,100 @@
+% !TEX root = ../../main_power.tex
+% ---------------------------------------------------------------------
+%  Kinetis K22 / tinyK22 (Teil 5)
+% ---------------------------------------------------------------------
+\section{Kinetis und tinyK22}
+\label{sec:kinetis}
+
+\begin{falle}[Sicherheitsgurt -- zuerst lesen]
+Geht der K22 sofort nach dem Start in Reset oder Fault, ist der
+K20-Debug-Chip (Boards vor V1.3) nicht schnell genug, um das Target
+zwischen zwei Resets anzuhalten \ra \textbf{kein Zugriff mehr auf den
+K22}. Jedes Low-Power-Experiment beginnt deshalb mit einer Verzögerung,
+die dem Debugger eine Chance gibt:
+\begin{lstlisting}
+static void safetyBelt(void) {
+  for(int i=0; i<20000000; i++) {
+    __asm("nop"); /* give debugger a chance */
+  }
+}
+int main(void) { safetyBelt(); ... }
+\end{lstlisting}
+\end{falle}
+
+\subsection{Board}
+\begin{ztab}{@{}lX@{}}
+Speisung & 5\,V über K20-USB oder K22-USB \ra \R{VREGIN} \ra
+  \R{VOUT} 3.3\,V, insgesamt max.\ 120\,mA. Schottky-Diode
+  \R{PMEG2005CT} gegen Rückstrom; \R{JP1} setzen, wenn der K20 nicht
+  gebraucht wird \\
+SD-Karte & optional, mit eigenem Regler \R{TC1262-3.3VDB} (500\,mA,
+  Wirkungsgrad 80\,\%). Low Power: industrielle Karten, wenig lesen und
+  vor allem \emph{wenig schreiben} \\
+Pins & Debug-/JTAG-Pins haben in der Default-Konfiguration teils
+  Pull-ups. Sonst: Default-Muxing lassen und floating -- siehe
+  „Configuration for Unused Pins/GPIOs on Kinetis“ \\
+\end{ztab}
+
+\subsection{Flash zur Laufzeit programmieren}
+Gebraucht für Bootloader, Kalibrierdaten, Einstellungen und Logs.
+Programmieren erfordert \T{höhere interne Spannungen} aus Ladungspumpen
+\ra deutlich höherer Verbrauch und Anforderungen an die Speisung.
+\begin{falle}[Nicht in jedem Modus]
+Flash-Programmierung ist \emph{nicht} in allen Power-Modi und bei jeder
+Taktfrequenz erlaubt -- aus \R{HSRUN} muss man vorher zurück in
+\R{RUN}, und Interrupts werden abgeschaltet:
+\begin{lstlisting}
+SMC_SetPowerModeRun(SMC);   /* Fcore=60MHz, Fbus=Fflash=20MHz */
+McuWait_Waitms(1);          /* Takt umschalten lassen */
+uint32_t primask = DisableGlobalIRQ();
+FLASH_Erase(&s_flashDriver, FLASH_NVM_ADDR_START, ...);
+\end{lstlisting}
+\end{falle}
+
+\subsection{Clock Gating und Gear Shifting}
+\label{rez:gearshift}
+\begin{lstlisting}
+CLOCK_EnableClock(kCLOCK_PortA);   /* Clock enabled  */
+CLOCK_DisableClock(kCLOCK_PortA);  /* Clock disabled */
+\end{lstlisting}
+\begin{falle}[HardFault ohne Takt]
+Ein Zugriff auf eine Peripherieeinheit, die \emph{nicht} mit einem Takt
+versorgt ist, löst einen \T{HardFault} aus. Beim Suchen eines
+HardFaults ist ein vergessenes \R{CLOCK\_EnableClock} ein
+Standardverdächtiger.
+\end{falle}
+\SW{Gear Shifting} Die Clock-\emph{Modi} zu wechseln ist kompliziert und
+dauert lange -- in der Praxis ändert man die \T{Clock-Divider}:
+\begin{lstlisting}
+configFast.clkdiv1 = 0x44440000U;  /* 20 MHz */
+configSlow.clkdiv1 = 0x99990000U;  /* 10 MHz */
+CLOCK_SetSimConfig(slow ? &configSlow : &configFast);
+SystemCoreClock = CLOCK_GetCoreSysClkFreq();
+UpdateUartClock();                 /* nicht vergessen! */
+\end{lstlisting}
+Die aktuelle Frequenz steht in \R{SystemCoreClock}. Beim Umschalten muss
+sich der Takt \emph{stabilisieren} (Zeit einrechnen), und alles, was den
+Takt mitbenutzt, muss nachgezogen werden -- der UART sonst sendet
+Buchstabensalat.
+
+\subsection{ARM Power Modes}
+\label{rez:modi}
+\begin{formel}[Drei Prinzipien, viele Modi]
+Jeder Modus kombiniert \T{Clock Gating}, abgeschaltete
+\T{Power Domains} und eine zulässige \T{Wakeup-Quelle}. Die Quelle
+unterscheidet die Klassen: \emph{synchron} braucht noch einen Takt,
+\emph{asynchron} kommt ohne aus.
+\end{formel}
+\begin{ztab}{@{}llX@{}}
+\T{Run} & \R{HSRUN RUN VLPR} & Core läuft mit dem Core-Clock, alles
+  aktiv \\
+\T{Sleep} & \R{WAIT VLPW} & Core-Clock gated (\R{wfi}), Peripherie
+  aktiv, der \T{NVIC} weckt \emph{synchron} \\
+\T{Deepsleep} & \R{STOP VLPS} \R{LLS2 LLS3} \R{VLLS3 VLLS2} \R{VLLS1
+  VLLS0} & Aufwecken nur \emph{asynchron} über \T{AWIC} (Asynchronous
+  Wakeup Interrupt Controller) oder \T{LLWU} (Low Leakage Wakeup
+  Unit) \\
+\end{ztab}
+\merkzeile \R{VLP\dots} heisst Very Low Power, \R{LLS} Low Leakage Stop,
+\R{VLLS} Very Low Leakage Stop -- je weiter unten in der Liste, desto
+weniger bleibt erhalten und desto länger dauert das Aufwachen.

@@ -1,0 +1,140 @@
+% !TEX root = ../../main_docker.tex
+% Container betreiben
+
+\section{Container betreiben}
+\label{sec:cnt}
+
+\subsection{Lebenszyklus}
+Vier Zustände: \T{created} $\to$ \T{running} $\to$ \T{stopped} $\to$
+\T{deleted}, dazu das lokale Image-Repository als fünfter Knoten:
+\begin{lstlisting}
+Docker Hub --pull--> lokales Image-Repo
+  lokales Repo --run-----> running
+  lokales Repo --create--> created --start--> running
+  running  --stop--> stopped --start/restart--> running
+  stopped/created --rm--> deleted
+  Container --commit--> lokales Image-Repo
+\end{lstlisting}
+\begin{ztab}{@{}lX@{}}
+\R{docker run <img>} & Image \ra Container erzeugen \emph{und} starten \\
+\R{docker create <img>} & nur erzeugen (Zustand \emph{created}) \\
+\R{docker start <cnt>} & starten, \emph{detached} (Hintergrund) \\
+\R{docker start -i <cnt>} & starten, \emph{attached} (Vordergrund) \\
+\R{docker stop <cnt>} & running \ra stopped \\
+\R{docker restart <cnt>} & stop, dann start \\
+\R{docker rm <cnt>} & Container löschen \\
+\R{docker rmi <img>} & Image löschen \\
+\end{ztab}
+
+\begin{falle}[Drei Stolperstellen]
+1.~\T{Jedes \R{run} erzeugt einen \emph{neuen} Container} -- nicht
+\R{run} zum Wiederstarten nehmen, sondern \R{start}.\\
+2.~Ein Image lässt sich \textbf{nicht} löschen, solange noch ein Container
+davon existiert.\\
+3.~Wer \R{-it} beim \R{create} vergisst, kann den Container später nicht
+interaktiv nutzen -- die Option muss schon beim \emph{Erzeugen} dabei sein.
+\end{falle}
+
+\subsection{Die wichtigsten Kommandos}
+\begin{ztab}{@{}lX@{}}
+\R{docker image ls} & lokale Images (kurz: \R{docker images}) \\
+\R{docker ps} & laufende Container (lang: \R{container ls}) \\
+\R{docker ps -a} & auch beendete \\
+\R{docker ps -a --size} & mit Platzbedarf \\
+\R{docker run -it <img>} & interaktiv (siehe unten) \\
+\R{docker run --rm <img>} & Container nach Ende sofort löschen \\
+\R{docker run --name <n> <img>} & eigener Name statt Zufallsname \\
+\R{docker rename <alt> <neu>} & nachträglich umbenennen \\
+\R{docker attach <cnt>} & Terminal an Hintergrund-Container hängen \\
+\R{docker container prune} & \emph{alle} gestoppten Container löschen \\
+\R{docker login -u <user>} & an Docker Hub anmelden \\
+\R{docker image push <tag>} & Image auf Docker Hub laden \\
+\end{ztab}
+Docker vergibt jedem Container eine zufällige \T{ID} und einen zufälligen
+\T{Namen}; Kommandos akzeptieren beides. Fehlt ein Image lokal, lädt
+\R{run} es automatisch von Docker Hub.
+
+\begin{formel}[Was \R{-i} und \R{-t} bedeuten]
+\R{-i} verbindet den Container mit der Standardeingabe, \R{-t} legt einen
+Pseudo-Terminalemulator davor. Zusammen \R{-it} ergibt eine
+Terminal-Sitzung wie bei \R{ssh}.\\
+\T{Ohne \R{-it} beendet sich ein Shell-Container sofort}: die \R{bash}
+findet keine Standardeingabe und bricht ab -- der häufigste Anfängerfehler.
+\end{formel}
+
+\subsection{Beenden und Trennen}
+\label{sec:beenden}
+\begin{ztab}{@{}lX@{}}
+\R{exit} & beendet die Shell im Container \ra Container \emph{stopped} \\
+\R{<Ctrl-d>} & dasselbe (beendet die Shell) \\
+\R{<Ctrl-c>} & \emph{nicht-interaktiv}: beendet \R{docker run} und damit
+  den Container; \emph{interaktiv}: beendet nur das gerade laufende
+  Programm \emph{in} der Shell, nicht die Shell \\
+\R{<Ctrl-p> <Ctrl-q>} & \T{detach}: nur das Terminal trennen, Container
+  läuft weiter. Nur bei Containern mit \R{-it}. Zurück mit \R{attach}. \\
+\end{ztab}
+In allen Fällen \emph{existiert} der Container weiter (Status
+\emph{Exited}), bis man ihn mit \R{rm} löscht.
+
+\subsection{Schlanke Images}
+\label{rez:groesse}
+Images sind bewusst minimal -- im Ubuntu-Image fehlen \R{ping}, \R{nano},
+\R{wget}, \R{curl}; vorhanden sind \R{cp}, \R{mv}, \R{mkdir}, \R{cat},
+\R{tar}, \R{apt}, \R{ps}, \R{top}.
+\SW{Nachinstallieren} erst die Paketlisten aktualisieren, dann installieren:
+\begin{lstlisting}
+apt -y update && apt -y install nano
+\end{lstlisting}
+\R{-y} beantwortet alle Rückfragen mit Ja (nötig, weil beim Bauen von
+Images niemand tippt). Die Verkettung mit \R{\&\&} ist üblich -- warum,
+zeigt sich beim Dockerfile.
+
+\SW{Auch die Prozesse sind minimal} Auf einem normalen Linux laufen viele
+Dienste (\R{sshd}, \R{dockerd}, \R{dhcpd}, \dots{} -- in Unix
+\emph{daemons}, Endung \R{d}). Im Ubuntu-Container läuft \T{genau ein
+Prozess: \R{bash}} -- der Container soll nur eine Software ausführen, den
+Rest stellt der Host bereit. Zählen mit \R{ps -aux | wc -l}.
+
+\begin{bsp}[Platzbedarf -- typische Prüfungsfrage]
+\R{docker ps -a --size} zeigt \R{0B (virtual 192MB)}: der Container selbst
+belegt nichts, solange er nichts geändert hat; die 192\,MB sind das Image.
+Installiert man darin 20\,MB Software, wächst der \emph{Container} um
+20\,MB, das Image bleibt gleich gross.\\
+\ra 4 Container aus einem 50-MB-Image ohne Änderungen brauchen zusammen
+\T{50\,MB}, nicht 200. Und: Dateien \emph{im Container} zu löschen gibt
+keinen Platz frei, wenn sie aus dem Image stammen.
+\end{bsp}
+
+\subsection{Hintergrund und zusätzliche Prozesse}
+\begin{ztab}{@{}lX@{}}
+\R{docker run -d <img>} & \T{detached} starten; läuft, bis der gestartete
+  Prozess sich beendet. Für Serverdienste ohne Shell-Interaktion. \\
+\R{docker run -itd <img>} & interaktiv \emph{und} detached; kehrt sofort
+  zurück, später \R{attach} \\
+\R{docker logs <cnt>} & Ausgabe des Containers ansehen \\
+\R{docker logs -f <cnt>} & \emph{folgt} der Ausgabe wie \R{tail -f};
+  Abbruch mit \R{<Ctrl-c>} \\
+\R{docker exec <cnt> <cmd>} & \T{zusätzlichen} Prozess im laufenden
+  Container starten \\
+\R{docker exec -it <cnt> bash} & zweite Shell parallel -- das
+  Debug-Werkzeug \\
+\R{docker exec -d <cnt> <cmd>} & dieser Prozess im Hintergrund \\
+\R{docker top <cnt> ax} & Prozesse \emph{im} Container auflisten \\
+\end{ztab}
+
+\begin{formel}[\R{run} gegen \R{exec} -- der Unterschied]
+\R{run} erzeugt einen \T{neuen Container} aus einem Image.
+\R{exec} startet einen \T{weiteren Prozess} in einem \emph{bereits
+laufenden} Container. \R{exec} auf einen gestoppten Container
+funktioniert nicht.
+\end{formel}
+
+\subsection{Dateien kopieren: \R{docker cp}}
+\begin{lstlisting}
+docker cp <cnt>:<quelle> <ziel>    # Container -> Host
+docker cp <quelle> <cnt>:<ziel>    # Host -> Container
+\end{lstlisting}
+Funktioniert auch bei einem Container im Zustand \emph{created}, also
+bevor er je lief. Typische Abfolge: \R{docker create --name myubuntu -it
+ubuntu} $\to$ \R{docker cp hello.txt myubuntu:/tmp/} $\to$
+\R{docker start myubuntu} $\to$ \R{docker attach myubuntu}.

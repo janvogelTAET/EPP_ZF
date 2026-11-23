@@ -1,4 +1,4 @@
-% !TEX root = ../main.tex
+% !TEX root = ../../main_performance.tex
 % ---------------------------------------------------------------------
 %  RISC-V ISA
 % ---------------------------------------------------------------------
@@ -48,6 +48,62 @@ I / U & short-lower / long-upper Immediate; I$+$U ergeben eine
 S & Store, Subtyp \T{B} $=$ bedingte Branches \\
 J & unbedingte Jumps \\
 \end{ztab}
+
+\subsection{Befehlsformate: wo welches Feld liegt}
+\label{rez:format}
+\begin{formel}[Das Layout, aus dem sich alles ableiten lässt]
+\R{opcode} steht immer in Bit 6:0, die Registerfelder immer an
+derselben Stelle -- darum kann das Registerfile gelesen werden,
+\emph{bevor} der Decoder fertig ist.
+\begin{tabular}{@{}l@{\hskip4pt}l@{}}
+Typ & Felder von Bit 31 nach 0 \\ \midrule
+\R{R} & \R{funct7(7) rs2(5) rs1(5) funct3(3) rd(5) opcode(7)} \\
+\R{I} & \R{imm[11:0](12) rs1(5) funct3(3) rd(5) opcode(7)} \\
+\R{S} & \R{imm[11:5] rs2 rs1 funct3 imm[4:0] opcode} \\
+\R{B} & wie \R{S}, Immediate anders zusammengesetzt \\
+\R{U} & \R{imm[31:12](20) rd(5) opcode(7)} \\
+\R{J} & wie \R{U}, Immediate anders zusammengesetzt \\
+\end{tabular}\\[2pt]
+\R{funct3} $=$ Bit 14:12 ist die \emph{Opcode-Erweiterung},
+\R{funct7} $=$ Bit 31:25 unterscheidet bei \R{R} die letzten Varianten
+(darum \R{add}/\R{sub} und \R{srl}/\R{sra} denselben \R{funct3} haben).
+Bei \R{RV32C}: Opcode in Bit 1:0, \R{funct3} in Bit 15:13.
+\end{formel}
+\merkzeile \R{B} und \R{J} sind \emph{Subtypen} von \R{S} und \R{U} --
+gleiche Feldaufteilung, nur das Immediate wird anders verdrahtet, damit
+das Vorzeichenbit immer auf Bit 31 liegt.
+
+\subsection{Die 47 Befehle (Green Card)}
+\label{rez:greencard}
+\begin{ztab}{@{}llX@{}}
+Befehl & \R{funct7 funct3} & Typ: \R{opcode} \\ \midrule
+\R{add\{-|i\}} & \R{0000000 000} & \R{R:0110011} $|$ \R{I:0010011} \\
+\R{sub} & \R{0100000 000} & \R{R:0110011} \\
+\R{and\{-|i\}} & \R{0000000 111} & \R{R:0110011} $|$ \R{I:0010011} \\
+\R{or\{-|i\}} & \R{0000000 110} & \R{R:0110011} $|$ \R{I:0010011} \\
+\R{xor\{-|i\}} & \R{0000000 100} & \R{R:0110011} $|$ \R{I:0010011} \\
+\R{sll\{-|i\}} & \R{0000000 001} & \R{R:0110011} $|$ \R{I:0010011} \\
+\R{srl\{-|i\}} & \R{0000000 101} & \R{R:0110011} $|$ \R{I:0010011} \\
+\R{sra\{-|i\}} & \R{0100000 101} & \R{R:0110011} $|$ \R{I:0010011} \\
+\R{slt\{-|i\}\{u\}} & \R{0000000 010|011} & \R{R:0110011} $|$ \R{I:0010011} \\
+\R{lui} & -- & \R{U:0110111} \\
+\R{auipc} & -- & \R{U:0010111} \\
+\R{b\{eq|ne\}} & \R{000|001} & \R{B:1100011} \\
+\R{b\{ge|lt\}\{u\}} & \R{101|100} & \R{B:1100011}, unsigned \R{100|101} \\
+\R{jal\{-|r\}} & -- & \R{J:1101111} $|$ \R{I:1100111} \\
+\R{l\{b|h|w\}} & \R{000|001|010} & \R{I:0000011} \\
+\R{l\{b|w\}u} & \R{100|101} & \R{I:0000011} \\
+\R{s\{b|h|w\}} & \R{000|001|010} & \R{S:0100011} \\
+\R{fence\{.i\}} & -- & \R{I:0001111} -- Write Buffer leeren \\
+\R{e\{break|call\}} & -- & \R{I:1110011} -- Debugger/OS rufen \\
+\R{csr\{rc|rs|rw\}\{-|i\}} & \R{011|010|001} & \R{I:1110011} \\
+\end{ztab}
+\merkzeile Die \R{CSR} (Control and Status Register) enthalten
+64-Bit-Zähler für System-Ticks, ausgeführte Instruktionen und produktive
+Taktzyklen -- damit misst man auf dem RISC-V die IPC.
+\merkzeile \R{sub} gibt es nur als \R{R}-Typ: \R{subi} wäre
+überflüssig, weil \R{addi} mit negativem Immediate dasselbe tut. Solche
+Weglassungen sind das Prinzip der ISA.
 
 \subsection{Keine ALU-Flags}
 \label{sec:rvflags}

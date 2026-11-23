@@ -1,0 +1,39 @@
+% =====================================================================
+% EPP -- Zusammenfassung Teil "Embedded Power"
+% MEP-Hilfsmittel: 4 A4-Seiten (Folie 10, Teil 1)
+%
+% Bauen:  latexmk -pdf main_power.tex
+% Layout, Farben, Boxen und eigene Befehle stehen in preamble.tex
+% und gelten fuer alle drei Zusammenfassungen.
+% =====================================================================
+\documentclass[8pt]{extarticle}
+
+\newcommand{\doctitle}{EPP Power}
+\newcommand{\docsubject}{Power}
+
+\input{preamble}
+
+% =====================================================================
+\begin{document}
+
+\begin{multicols*}{2}
+  {\centering
+   {\Large\bfseries \doctitle\par}\vspace{1pt}
+   {\footnotesize \docauthors \quad\textbullet\quad \docdate\par}}
+  \vspace{4pt}
+  \input{sections/power/00_navigation}
+  \vspace{2pt}
+  \tableofcontents
+  \vspace{3pt}
+
+  \input{sections/power/01_grundlagen}
+  \input{sections/power/02_hardware}
+  \input{sections/power/03_software}
+  \input{sections/power/04_kinetis}
+  \input{sections/power/05_freertos}
+  \input{sections/power/06_messen}
+  \input{sections/power/90_referenz}
+  \input{sections/power/99_register}
+\end{multicols*}
+
+\end{document}

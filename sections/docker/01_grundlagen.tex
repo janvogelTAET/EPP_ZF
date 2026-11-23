@@ -1,0 +1,49 @@
+% !TEX root = ../../main_docker.tex
+% Grundbegriffe
+
+% ---------------------------------------------------------------------
+%  Docker -- Software-Virtualisierung mit Containern
+% ---------------------------------------------------------------------
+\section{Grundbegriffe}
+\label{sec:docker}
+
+\SW{Wozu} Plattform zur \T{Software-Virtualisierung}: Software wird in
+standardisierte, wiederverwendbare Einheiten verpackt, die \emph{alles}
+enthalten, was zum Ausführen nötig ist. Diese Einheiten laufen auf nahezu
+jedem Rechner direkt \ra portabel, skalierbar, unkompliziert.
+Das Problem, das sie löst: „Bei mir läuft's!“ -- Abhängigkeiten,
+Versionskonflikte, Installationsprozeduren.
+
+\SW{Abgrenzung} Docker virtualisiert \emph{nur den Linux-Kernel}, nicht
+die ganze Maschine. Deshalb gilt immer \T{Container-OS $=$ Host-OS} --
+anders als bei einer virtuellen Maschine. Auf Windows/macOS braucht Docker
+deshalb eine VM (WSL). Die Programme laufen direkt auf dem Host-Kernel;
+in \R{ps ax} auf dem Host sieht man den Container-Prozess.
+
+\subsection{Image vs.\ Container}
+\begin{ztab}{@{}lXX@{}}
+ & Image & Container \\ \midrule
+Was & Bauplan, alles Nötige zum Ausführen & ein \emph{ausgeführtes} Image \\
+Dateisystem & \T{read-only}, unveränderlich & \T{read-write} Overlay über dem Image \\
+Anzahl & eines & beliebig viele aus einem Image \\
+Platz & volle Grösse & nur die \emph{Änderungen} gegenüber dem Image \\
+Lebensdauer & bis \R{rmi} & bis \R{rm}, überlebt das Stoppen \\
+\end{ztab}
+
+\begin{formel}[Der Satz, der alles trägt]
+Das Ausführen eines \emph{Images} erzeugt einen \emph{Container} --
+nie umgekehrt. Änderungen zur Laufzeit (Logfiles, DB-Einträge,
+nachinstallierte Pakete) landen im Overlay des Containers, das Image
+bleibt unberührt.
+\end{formel}
+
+\subsection{Host und Kapselung}
+\SW{Host} der Rechner mit dem OS, auf dem die Container laufen (hier
+Raspberry Pi OS). Er stellt nur die grundlegendsten OS-Funktionen bereit:
+nacktes Dateisystem, Prozesse, Sockets. \emph{Nicht} Software, Daten,
+User/Gruppen oder IP-Ports -- das muss der Container selbst mitbringen.
+
+\SW{Kapselung} Aus dem Container heraus normalerweise kein Zugriff auf das
+Dateisystem des Hosts oder anderer Container; gilt auch für User und Ports.
+Der Host dagegen kann Container und Images ändern und löschen.
+Die zwei Löcher in dieser Wand sind \R{docker cp} und \T{Volumes}.

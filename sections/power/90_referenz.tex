@@ -1,0 +1,121 @@
+% !TEX root = ../../main_power.tex
+% ---------------------------------------------------------------------
+%  Formelsammlung und Argumentationshilfe
+% ---------------------------------------------------------------------
+\section{Referenz}
+\label{sec:ref}
+
+\subsection{Formeln auf einen Blick}
+\begin{formel}[Alles, was gerechnet wird]
+\begin{align*}
+P &= U \cdot I \\
+E &= \int_0^T P(t)\,dt \;=\; \int_0^T I(t)\,V(t)\,dt \\
+I &= \frac{dQ}{dt} \;=\; C \cdot \frac{dV}{dt} \\
+P_{total} &= \alpha C_{load} V_{dd}^{2} f \;+\; t_{SC} V_{dd} I_{peak}
+   \;+\; V_{dd} I_{leak}
+\end{align*}
+Mittelwerte: $E = P_{avg} \cdot T$, $P_{avg} = U \cdot I_{avg}$.
+Einheiten: 1\,Wh $=$ 3600\,Ws; 1\,\textmu Wh $=$ 3.6\,mWs.
+\end{formel}
+
+\begin{bsp}[Typische Rechnung: Batterielaufzeit]
+Ein Gerät wacht jede Sekunde für 100\,ms auf (5\,mA) und schläft 900\,ms
+(10\,\textmu A), bei 3.0\,V.\\
+$I_{avg} = 0.1\cdot 5\,\text{mA} + 0.9\cdot 0.01\,\text{mA}
+ = 0.5 + 0.009 = 0.509\,\text{mA}$\\
+$P_{avg} = 3.0\,\text{V} \cdot 0.509\,\text{mA} = 1.53\,\text{mW}$\\
+Mit 220\,mAh: $t = 220/0.509 \approx 432\,$h $\approx$ 18 Tage.\\[2pt]
+\merkzeile Die Wachphase macht hier 98\,\% des Verbrauchs aus. Den
+Schlafstrom weiter zu senken bringt fast nichts -- die Wachzeit zu
+halbieren halbiert die Laufzeit\emph{kosten}. Immer zuerst ausrechnen,
+welcher Summand dominiert.
+\end{bsp}
+
+\subsection{Rechnen mit Sleep-Modi}
+\begin{formel}[Lohnt sich das Schlafen?]
+Schlafen lohnt nur, wenn die Schlafzeit den Aufwach-Overhead trägt:
+\[ t_{sleep} > t_{wake} \cdot \frac{P_{wake} - P_{sleep}}{P_{run} - P_{sleep}} \]
+Praktisch: \T{die Energie zum Aufwachen muss kleiner sein als die
+Energie, die man durch das Schlafen spart}. Bei einem 32-kHz-Quarz mit
+einigen hundert Millisekunden Anschwingzeit ist ein Schlaf von 10\,ms
+ein Verlustgeschäft.
+\end{formel}
+\begin{bsp}[Gear Shifting durchgerechnet]
+Eine Aufgabe braucht $N$ Takte. Bei 20\,MHz dauert sie
+$T_1 = N/20\,$MHz, bei 10\,MHz doppelt so lang.\\
+\T{Dynamisch:} $P \propto f$ \ra halbe Leistung, doppelte Zeit
+\ra \emph{gleiche Energie}.\\
+\T{Statisch:} $P = V_{dd}I_{leak}$ ist von $f$ \emph{unabhängig}
+\ra doppelte Zeit $=$ \textbf{doppelte} statische Energie.\\[2pt]
+\merkzeile Den Takt allein zu senken bringt energetisch \emph{nichts}
+und kann schaden. Es lohnt sich nur, wenn man gleichzeitig $V_{dd}$
+senken kann (dann wirkt das Quadrat) oder wenn die Alternative Warten
+statt Schlafen wäre. Das ist die wichtigste Fehlannahme im ganzen Thema.
+\end{bsp}
+
+\begin{rezept}[Eine Messung, die als Argument taugt]
+\begin{enumerate}
+\item \T{Ziel definieren} -- was genau soll kleiner werden, Leistung
+      oder Energie, und in welchem Betriebszustand?
+\item \T{Messpunkt festlegen} -- vor oder nach dem Regler? Nur der
+      MCU oder das ganze Board? Der Wirkungsgrad des Reglers
+      (beim tinyK22 80\,\% für die SD-Karte) steckt sonst
+      unbemerkt in jeder Zahl.
+\item \T{Basismessung} vor jeder Änderung, mit Zeitstempel und
+      Screenshot ins Journal.
+\item \T{Eine Variable pro Durchgang} ändern -- $V_{dd}$, dann
+      Frequenz, dann Modus. Sonst lässt sich die Wirkung nicht
+      zuordnen.
+\item \T{min/avg/max und Dauer} notieren, nicht nur den Mittelwert.
+      Bei Lastwechseln gehört der Verlauf dazu.
+\item \T{Gegenrechnen} -- passt die Messung zur Theorie? Wenn
+      $V_{dd}$ halbiert wird und der Strom nicht um etwa den Faktor 4
+      fällt, ist entweder der statische Anteil dominant oder der
+      Messaufbau falsch.
+\end{enumerate}
+\end{rezept}
+
+\begin{falle}[Die drei häufigsten Messfehler]
+\T{(a) Falscher Messbereich.} \textmu A im Schlaf und mA im Betrieb
+passen nicht in denselben Bereich -- der Mittelwert wird dann von
+Quantisierung dominiert.\\
+\T{(b) Der Debugger speist mit.} Solange die Debug-Probe am Target
+hängt, fliesst Strom über die SWD-Leitungen. Für die Endmessung
+trennen oder den Pfad kennen.\\
+\T{(c) Das Board ist nicht der Chip.} Regler, Debug-Chip, LEDs und
+Pull-ups laufen weiter. Die gemessenen 3.39\,mA im \R{STOP}-Modus
+(\ref{sec:messen}) sind überwiegend \emph{nicht} der K22.
+\end{falle}
+
+\subsection{Von der Aufgabe zur Massnahme}
+\begin{ztab}{@{}lX@{}}
+„Verbrauch halbieren“ & zuerst $V_{dd}$ (quadratisch), dann Wachzeit,
+  dann Takt \ref{form:ptotal} \\
+„warum wird es schlechter, obwohl ich den Takt senke“ & statischer
+  Anteil bleibt, Arbeit dauert länger \ra mehr Zeit mal $V_{dd}I_{leak}$
+  \ref{sec:statisch} \\
+„Peripherie aus, aber es ändert nichts“ & Clock Gating statt Power
+  Gating, oder parasitäre Speisung über Signalleitungen
+  \ref{rez:gating} \\
+„HardFault nach dem Sparen“ & Zugriff auf Peripherie ohne Takt
+  \ref{rez:gearshift} \\
+„UART spinnt nach Gear Shift“ & Prescaler nicht nachgezogen
+  \ref{rez:gearshift} \\
+„welcher Modus für diese Weckquelle“ & synchron $\to$ Sleep (NVIC),
+  asynchron $\to$ Deepsleep (AWIC/LLWU) \ref{rez:modi} \\
+„RTOS schläft nicht richtig“ & Idle Hook gesetzt, aber Tick weckt
+  \ra Tickless Idle \ref{rez:tickless} \\
+„Messung unplausibel“ & Innenwiderstand, Dynamikbereich, parasitäre
+  Pfade \ref{falle:pwr} \\
+\end{ztab}
+
+\subsection{Semesterleistung}
+Dreierteams, tinyK22 $+$ LPC804, 5\,\% der MEP. Abgabe auf ILIAS:
+Präsentation (10\,min $+$ 5\,min Befragung) und Laborjournal, beides PDF.
+Bewertet werden Technik, Resultate, Kompetenz, Überzeugungskraft,
+Reflexion und Präsentationstechnik.
+\merkzeile Vorgehen: mit Blinky starten, analysieren, \emph{messen und
+dokumentieren}, verbessern, recherchieren (Datenblätter, SDK-Beispiele),
+Schlüsse ziehen. Vorher Ziele definieren: Was soll erreicht werden? Was
+und wo wird gemessen? Welchen Einfluss haben Schaltung, $V_{dd}$,
+Frequenz und Software?

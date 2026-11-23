@@ -1,0 +1,202 @@
+% !TEX root = ../../main_docker.tex
+% Schlanke Images
+
+\section{Mehrstufige Builds und schlanke Images}
+\label{sec:multistage}
+
+\subsection{Dangling Images}
+Images ohne Namen (engl.\ „baumelnd“, wie der dangling pointer in C).
+Zwei Entstehungswege:
+\begin{enumerate}
+\item \R{docker build .} ohne \R{-t} \ra das Image bekommt nie einen Namen
+\item ein neueres Image gleichen Namens \T{nimmt dem älteren den Namen weg}
+      -- beide bleiben erhalten, denn es könnte noch einen Container der
+      alten Version geben
+\end{enumerate}
+\begin{ztab}{@{}lX@{}}
+\R{docker images -a} & zeigt sie als \R{<untagged>} \\
+\R{docker images --no-trunc} & zeigt \R{<none>:<none>} \\
+\R{docker images --filter dangling=true} & nur die namenlosen \\
+\R{docker image prune} & alle dangling Images löschen \\
+\R{docker image prune -a} & \emph{alle} Images ohne zugeordneten Container \\
+\R{docker tag <alt> <neu>} & nachträglich (um)benennen \\
+\end{ztab}
+\merkzeile Ein versehentlich überschriebener Tag ist also kein
+Datenverlust: Image-ID aus \R{docker images -a} holen und mit
+\R{docker tag} wieder benennen -- solange man nicht vorher \R{prune} laufen lässt.
+
+\subsection{Multi-stage Builds}
+\label{rez:multistage}
+\begin{formel}[Die Grundidee]
+Das übersetzte Programm läuft auch in einem Image \emph{ohne} SDK. Also:
+in Stufe 1 mit der Entwicklungsumgebung bauen, in Stufe 2 nur das
+Ergebnis in ein schlankes Parent-Image kopieren. \T{Mehrere \R{FROM} im
+selben Dockerfile $=$ mehrere Stufen; nur die letzte wird zum Resultat.}
+\end{formel}
+\begin{lstlisting}
+FROM gcc as builder                  # Stufe benennen
+WORKDIR /myapp
+COPY hello-world.c /myapp
+RUN gcc -o hello-world hello-world.c
+
+FROM debian                          # neue Stufe = neues Parent-Image
+WORKDIR /myapp
+COPY --from=builder /myapp/hello-world /myapp
+CMD ["/myapp/hello-world"]
+\end{lstlisting}
+\begin{ztab}{@{}lX@{}}
+\R{FROM <image> as <name>} & benennt die Stufe \\
+\R{COPY --from=<name> <src> <dest>} & kopiert zwischen Stufen \\
+\R{docker build . --target <name>} & nur bis zu dieser Stufe bauen \ra das
+  Debug-Werkzeug, wenn ein mehrstufiger Build abbricht und gar kein Image
+  entsteht \\
+\end{ztab}
+
+\begin{bsp}[Was die Wahl des Parent-Images ausmacht]
+Dasselbe \R{hello-world.c}, vier Varianten:
+\begin{tabular}{@{}lr@{}}
+\R{my-hello-world} (einstufig) & 1.18 GB \\
+\R{multistage\_debian} & 118 MB \\
+\R{multistage\_alpine} & 8.18 MB \\
+\R{multistage\_scratch} & 721 kB \\
+\end{tabular}\\[2pt]
+Faktor \textbf{$\sim$160} zwischen scratch und debian, Faktor
+$\sim$1600 zum einstufigen Build.
+\end{bsp}
+
+\subsection{Parent-Image wählen: Funktionalität gegen Grösse}
+\begin{ztab}{@{}lrX@{}}
+\R{scratch} & 0 B & leeres Image; das Programm muss \emph{alle}
+  Abhängigkeiten mitbringen, keine Linux-Kommandos \\
+\R{alpine} & $\sim$14 MB & busybox, Shell \R{sh}, \T{musl libc},
+  Paketmanager \R{apk}; wichtige Befehle sind Links auf \R{/bin/busybox};
+  kein \R{bash}-Komfort (nachrüstbar mit \R{apk add bash}) \\
+\R{debian} & $\sim$200 MB & vollständiges Linux: GNU-Werkzeuge,
+  \R{bash}, \T{GNU libc}, Paketmanager \R{apt} \\
+\end{ztab}
+\SW{Was die Anwendung braucht, bestimmt das Parent-Image}
+Shell-Skripte \ra Linux mit \R{sh}/\R{bash} $\cdot$ Nachinstallieren
+\ra Paketverwaltung $\cdot$ Laufzeitumgebung \ra offizielles Image
+(Runtime, nicht SDK) $\cdot$ Drittanbieter-Bibliotheken \ra kompatibel zur
+Runtime $\cdot$ im Betrieb debugbar \ra volles Linux mit \R{nano}, \R{ps}.
+\merkzeile Der \emph{letzte} Build-Schritt bestimmt Funktionalität und
+Grösse des Ergebnisses.
+
+\subsection{Statisch gegen dynamisch binden, und die libc}
+\label{sec:linken}
+\SW{Compiler und Linker} Der Compiler macht aus jeder \R{.c} eine
+\R{.o}-Datei mit den Einträgen „ich brauche X“ und „ich liefere Y“. Der
+Linker verbindet jedes „ich brauche X“ mit genau einem „ich liefere X“ --
+aus \R{.o}-Dateien und Bibliotheken (\R{.a}, \R{.so}).
+
+\begin{ztab}{@{}lX@{}}
+\T{statisch} & \R{gcc -static -o out code.c} -- die benötigten
+  Bibliotheksfunktionen werden \emph{ins Binary kopiert}. Grösser, aber in
+  sich vollständig. \emph{Die Schnecke kann nicht aus ihrem Haus.} \\
+\T{dynamisch} & \R{gcc -o out code.c} -- im Binary steht nur eine
+  Referenz auf die shared library; das OS bindet sie beim Programmstart.
+  Kleiner, aber abhängig von den installierten Bibliotheken \emph{und
+  deren Version}. \emph{Der Einsiedlerkrebs kann das Haus wechseln.} \\
+\end{ztab}
+
+\begin{bsp}[Dasselbe Programm, beide Varianten (arm64)]
+\begin{tabularx}{\linewidth}{@{}Xr@{}}
+dynamisch gebunden, Binary & 9.0 kB \\
+\quad dazu \R{libc.so.6} $\to$ \R{libc-2.31.so} im Image & 1.4 MB \\
+statisch gebunden, Binary & 706 kB \\
+\end{tabularx}\\[2pt]
+Geprüft mit \R{ldd hello-world}: dynamisch listet es die shared objects,
+statisch antwortet es \R{not a dynamic executable}. Statisch werden
+\emph{nur die benötigten} Funktionen kopiert -- nicht die ganzen 1.4 MB.
+\end{bsp}
+
+\SW{Pro dynamisch} kleinere Programme, eine Bibliothek für alle $\cdot$
+Bibliothek aktualisierbar ohne Neuübersetzung und Auslieferung $\cdot$
+effizientes Caching.
+\SW{Kontra dynamisch} braucht OS-Unterstützung \ra nicht auf
+Mikrocontrollern $\cdot$ Probleme bei veralteten Versionen $\cdot$ läuft
+gar nicht, wenn die Bibliothek fehlt.
+
+\SW{libc} Die C-Standardbibliothek: häufig benötigte Grundfunktionen
+(Mathematik, Zeichenketten) \emph{und} die User-Space-API zum Kernel
+(\R{open}, \R{read}, \R{write}, \R{malloc}, \R{printf}). Auch
+Nicht-C-Programme benutzen sie indirekt -- \R{ldd /usr/bin/python} zeigt
+\R{libc.so.6}.
+\begin{ztab}{@{}lX@{}}
+\T{GNU glibc} & in fast allen Distributionen; Ziel: Leistung und
+  Portabilität statt geringer Grösse \\
+\T{musl libc} & in Alpine Linux; Ziel: Korrektheit und geringe Grösse
+  statt Leistung \\
+\end{ztab}
+
+\begin{falle}[Warum das dynamisch gebundene Binary auf Alpine nicht lief]
+Der \R{gcc} aus dem \R{gcc}-Image bindet gegen \T{glibc}. Alpine bringt
+aber \T{musl} mit und kann ein dynamisch gegen glibc gebundenes Binary
+nicht starten. Deshalb stehen in \R{multistage\_alpine} und
+\R{multistage\_scratch} beide mit \R{gcc -static}.\\
+\T{Lösung} einen \R{gcc} verwenden, der gegen musl bindet -- den gibt es
+als Alpine-Paket:
+\R{RUN apk update \&\& apk add gcc musl-dev}, erste Stufe dann
+\R{FROM alpine as builder}.\\
+Ergebnis: Binary 70.9 kB, dynamisch gegen
+\R{/lib/ld-musl-aarch64.so.1} (642 kB) gebunden. Image 7.53 MB
+gegenüber 8.18 MB statisch -- das Alpine-Basis-Image allein sind 7.46 MB.
+\end{falle}
+
+\merkzeile Nicht prüfungsrelevant (Folie 362, aus Zeitgründen gestrichen):
+GPIO mit Raspi/C\#, Portainer, Docker Networking.
+
+\subsection{Die drei Aufgabenmuster}
+\label{rez:muster}
+Dieselbe Aufgabe („C\#-Quellen übersetzen und ausführen“) in drei
+Varianten -- das ist das Schema, nach dem geprüft wird.
+\begin{rezept}[A1: interaktiv, ohne Dockerfile]
+Host-Volume einhängen, im Container übersetzen, Ergebnis landet dank
+Volume direkt auf dem Host.
+\begin{lstlisting}
+$ docker run -it --rm -v $(pwd):/work \
+    mcr.microsoft.com/dotnet/sdk:7.0 bash
+# cd /work
+# dotnet publish -c Release -o ./out ./src
+# exit
+\end{lstlisting}
+\merkzeile \R{\$} $=$ Host, \R{\#} $=$ Container. Die Aufgabe verlangt
+ausdrücklich \T{Host-Volume statt \R{docker cp}} -- das Volume schreibt
+sofort und in beide Richtungen, \R{cp} wäre ein zusätzlicher Schritt
+nach dem Lauf.
+\end{rezept}
+\begin{rezept}[A2: single-stage Dockerfile]
+\begin{lstlisting}
+FROM mcr.microsoft.com/dotnet/sdk:7.0
+WORKDIR /app
+COPY . .
+RUN dotnet publish -c Release -o out ./src
+CMD ["dotnet", "out/Homework.dll"]
+\end{lstlisting}
+\R{\$ docker build . -t hw} dann \R{\$ docker run --rm hw}.
+\T{Nachteil:} das SDK bleibt im Image -- über 1\,GB für ein Programm von
+wenigen hundert Kilobyte.
+\end{rezept}
+\begin{rezept}[A3: multi-stage Dockerfile]
+\begin{lstlisting}
+FROM mcr.microsoft.com/dotnet/sdk:7.0 as builder
+WORKDIR /app
+COPY . .
+RUN dotnet publish -c Release -o out ./src
+
+FROM mcr.microsoft.com/dotnet/runtime:7.0
+WORKDIR /app
+COPY --from=builder /app/out /app/out
+CMD ["dotnet", "out/Homework.dll"]
+\end{lstlisting}
+\merkzeile Der Unterschied ist \emph{nur} das Parent-Image der zweiten
+Stufe: \T{\R{runtime} statt \R{sdk}}. Zum Ausführen braucht es keinen
+Compiler. Bei den offiziellen Images ist das die Standardpaarung --
+\R{sdk} zum Bauen, \R{runtime} zum Laufen.
+\end{rezept}
+\begin{falle}[Diagnose-Variable]
+In manchen Vorlagen steht \R{ENV COMPlus\_EnableDiagnostics=0}. Das
+schaltet die .NET-Diagnose ab, die sonst im Container über Named Pipes
+stolpert. Solche \R{ENV}-Zeilen erzeugen \emph{keinen} Layer -- sie sind
+reine Metadaten.
+\end{falle}

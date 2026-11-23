@@ -1,0 +1,47 @@
+% =====================================================================
+% EPP -- Zusammenfassung Teil "Embedded Performance"
+% MEP-Hilfsmittel: 12 A4-Seiten auf 6 Blaettern (doppelseitig)
+%
+% Bauen:  latexmk -pdf main_performance.tex
+% Layout, Farben, Boxen und eigene Befehle stehen in preamble.tex
+% und gelten fuer alle drei Zusammenfassungen.
+% =====================================================================
+\documentclass[8pt]{extarticle}
+
+\newcommand{\doctitle}{EPP Performance}
+\newcommand{\docsubject}{Performance}
+
+\input{preamble}
+
+% =====================================================================
+\begin{document}
+
+\begin{multicols*}{2}
+  {\centering
+   {\Large\bfseries \doctitle\par}\vspace{1pt}
+   {\footnotesize \docauthors \quad\textbullet\quad \docdate\par}}
+  \vspace{4pt}
+  \input{sections/performance/00_navigation}
+  \vspace{2pt}
+  \tableofcontents
+  \vspace{3pt}
+
+  % --- Speicher ---
+  \input{sections/performance/01_cache}
+  \input{sections/performance/02_mmu}
+  % --- Datenparallelitaet ---
+  \input{sections/performance/03_neon}
+  \input{sections/performance/04_rvv}
+  % --- Datentransport ---
+  \input{sections/performance/05_dma}
+  % --- Prozessor ---
+  \input{sections/performance/06_riscv}
+  \input{sections/performance/07_multicore}
+  % --- Hardware statt Software ---
+  \input{sections/performance/08_reconfig}
+  % --- Referenz ---
+  \input{sections/performance/90_referenz}
+  \input{sections/performance/99_register}
+\end{multicols*}
+
+\end{document}

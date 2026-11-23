@@ -1,4 +1,4 @@
-% !TEX root = ../main.tex
+% !TEX root = ../../main_performance.tex
 % ---------------------------------------------------------------------
 %  Virtual Memory / MMU
 % ---------------------------------------------------------------------
@@ -92,3 +92,44 @@ copy-on-write & Fork teilt Frames bis zum ersten Schreibzugriff \\
 \end{ztab}
 Achtung: Apple Silicon benutzt 16-kB-Pages, nicht 4\,kB wie im Rest der
 Vorlesung.
+
+\subsection{Übersetzung von Hand}
+\label{rez:mmutrans}
+\begin{rezept}[Virtuelle Adresse in physische umrechnen]
+Gegeben: Seitengrösse $S$, virtuelle Adresse $VA$, Page Table.
+\begin{enumerate}
+\item \T{Offset-Bits} $= \log_2 S$. Bei 4\,kB: 12\,Bit \ra die unteren
+      drei Hex-Ziffern.
+\item $VA$ aufteilen: \T{VPN} $=$ obere Bits, \T{Offset} $=$ untere.
+\item VPN in der Page Table nachschlagen \ra \T{PFN} (Frame-Nummer).
+      Valid-Bit prüfen -- ist es 0, Page Fault.
+\item $PA = (PFN \cdot S) + \text{Offset}$, oder in Hex einfach
+      PFN und Offset aneinanderhängen.
+\end{enumerate}
+\merkzeile Der Offset wird \emph{nie} übersetzt. Nur die Seitennummer
+wird ersetzt -- deshalb bleibt die Position innerhalb der Seite gleich.
+\end{rezept}
+
+\begin{bsp}[4\,kB-Seiten, 32-Bit-Adresse]
+$VA = \R{0x0000\,A3F8}$, Page Table sagt: VPN \R{0xA} $\to$ PFN
+\R{0x37}, Valid $=1$.\\
+Offset $= 12$\,Bit $\to$ Offset $=$ \R{0x3F8}, VPN $=$ \R{0x0000A}.\\
+$PA = \R{0x37}\cdot\R{0x1000} + \R{0x3F8} = \R{0x0003\,73F8}$.\\[2pt]
+Dieselbe Adresse bei \T{1\,MB-Seiten} (20\,Bit Offset): VPN $=$
+\R{0x000}, Offset $=$ \R{0x0A3F8} -- andere Aufteilung, andere
+Tabelle, dieselbe Rechnung.
+\end{bsp}
+
+\begin{bsp}[Warum zwei Stufen]
+32-Bit-Adressraum, 4\,kB-Seiten, 4\,B pro Eintrag.\\
+\T{Einstufig:} $2^{20}$ Einträge $\times$ 4\,B $= \T{4\,MB}$ Tabelle --
+\emph{pro Prozess}, komplett im Speicher, auch wenn der Prozess nur
+100\,kB benutzt.\\
+\T{Zweistufig:} 10\,Bit Verzeichnis $+$ 10\,Bit Tabelle. Das
+Verzeichnis ist $2^{10}\cdot 4\,\text{B} = 4\,$kB; dazu nur die
+tatsächlich benutzten Tabellen à 4\,kB. Für einen kleinen Prozess:
+$4\,\text{kB} + 2\cdot 4\,\text{kB} \approx \T{12--20\,kB}$ statt
+4\,MB.\\[2pt]
+\merkzeile Der Preis: \emph{zwei} Speicherzugriffe pro Übersetzung
+statt einem. Genau dagegen gibt es den TLB.
+\end{bsp}

@@ -5,7 +5,8 @@
 # =====================================================================
 
 # ---- Ausgabe --------------------------------------------------------
-# Das gebaute PDF gehoert nicht ins Repo (wird aus main.tex erzeugt).
+# Die gebauten PDFs gehoeren nicht ins Repo (werden aus den drei
+# main_*.tex erzeugt).
 *.pdf
 # Ausnahme: PDF-Grafiken, die als Quelle eingebunden werden.
 !figures/*.pdf

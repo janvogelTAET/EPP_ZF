@@ -1,0 +1,84 @@
+% !TEX root = ../../main_power.tex
+% ---------------------------------------------------------------------
+%  Software-Massnahmen und Problembereiche (Teil 4)
+% ---------------------------------------------------------------------
+\section{Software}
+\label{sec:pwrsw}
+
+\begin{formel}[Das Leitmotiv]
+\T{Schnell und kurz arbeiten, lange schlafen.} Weil der Low-Power-Modus
+um Grössenordnungen sparsamer ist als der Betrieb, zahlt sich jede
+Verkürzung der Wachphase doppelt aus -- selbst wenn sie mehr
+Spitzenleistung kostet.
+\end{formel}
+
+\begin{ztab}{@{}lX@{}}
+Sleep & so früh wie möglich hinein, so spät wie möglich heraus \\
+\T{Gear Shifting} & Takt dynamisch an die Last anpassen, analog dem
+  Blutdruck-/Herzschlagsystem: schnell nur, wenn nötig \\
+Delays & \emph{nicht} aktiv pollen \ra Interrupt \\
+Rechnen & Look-up-Tabellen statt Rechnung, FPU oder Coprozessor statt
+  Software-Emulation \\
+Peripherie & interne Einheiten abschalten; Resultat per Interrupt
+  abholen statt auf Fertigmeldung zu warten \\
+Interrupts & zum Aufwachen -- welche Quelle weckt, ist
+  hardwareabhängig \\
+Code-Dichte & weniger Instruktionen, Compiler-Optimierungen, Makros \\
+\end{ztab}
+
+\subsection{Compiler}
+Es gibt keine Option „optimiere auf Low Power“. Die beiden vorhandenen
+Richtungen wirken gegenläufig:
+\begin{ztab}{@{}lX@{}}
+auf Code-\emph{Grösse} & langsamerer Code, aber weniger davon -- besser
+  für Cache und Flash \\
+auf \emph{Geschwindigkeit} & grösserer Code, aber die Arbeit ist früher
+  fertig \ra früher im Low-Power-Modus \\
+\end{ztab}
+\merkzeile Welche Richtung gewinnt, lässt sich nicht vorhersagen, nur
+messen. Das ist genau die Art Aussage, die im Laborjournal belegt
+gehört.
+
+\begin{bsp}[Energieeffizienz von Programmiersprachen]
+Normiert auf C $=$ 1.00 (Studie „Energy Efficiency across Programming
+Languages“):
+\begin{tabular}{@{}lr@{\hskip8pt}lr@{}}
+C & 1.00 & C\# & 3.14 \\
+Rust & 1.03 & Go & 3.23 \\
+C++ & 1.34 & JavaScript & 4.45 \\
+Ada & 1.70 & TypeScript & 21.50 \\
+Java & 1.98 & \textbf{Python} & \textbf{75.88} \\
+\end{tabular}\\[2pt]
+Die Sprachwahl ist damit eine Grössenordnung wert -- mehr als die
+meisten Mikrooptimierungen im Code.
+\end{bsp}
+
+\subsection{Problembereiche}
+\label{falle:pwr}
+\begin{falle}[Woran Low-Power-Designs scheitern]
+\begin{description}
+\item[Aufwachen] dauert -- ein 32-kHz-Quarz braucht lange zum
+  Anschwingen. Trade-off: zu häufiges Aufwachen frisst den Gewinn des
+  Schlafens auf.
+\item[Clock] im Sparmodus eingeschränkte Funktionen; beim Gear Shifting
+  ziehen die Prescaler aller Peripherieeinheiten (UART!) mit.
+\item[Speisung] interne Schutzdioden, Stützkondensatoren, Einkopplung
+  von Signalpegeln von aussen.
+\item[Messung] Innenwiderstand des Multimeters (Spannungsabfall oder
+  Kurzschluss) und der \emph{Dynamikbereich}: \textmu A im Schlaf und
+  mA im Betrieb im selben Messbereich.
+\item[UART] Break-Zustand braucht Pull-up; vor dem Schlafen warten, bis
+  alles gesendet ist.
+\item[Pulls] I\textsuperscript{2}C hochohmig auslegen -- aber nicht zu
+  hochohmig, sonst leiden die Flanken.
+\item[Pins] intern nicht verdrahtete Pins nicht treiben; Eingang mit
+  internem Pull-up je nach Hersteller; Debug-Pins beachten.
+\item[Batterie] Selbstentladung, und die Spannung ist direkt nach dem
+  Einschalten höher als im eingeschwungenen Zustand.
+\item[Dioden] Z-Dioden leiten unterhalb der Z-Spannung bereits im
+  \textmu A-Bereich; dasselbe bei in Sperrrichtung geschalteten
+  Schottky-Dioden.
+\item[Reset] im Schlafmodus empfindlich gegen elektrostatische
+  Aufladung \ra Pull-ups und Filter.
+\end{description}
+\end{falle}

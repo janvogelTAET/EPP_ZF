@@ -1,0 +1,128 @@
+% !TEX root = ../../main_power.tex
+% ---------------------------------------------------------------------
+%  Werkzeuge und Messungen (Teil 2, Messwerte aus Teil 5)
+% ---------------------------------------------------------------------
+\section{Messen}
+\label{sec:messen}
+
+\subsection{MCU-Link Pro}
+\begin{ztab}{@{}lX@{}}
+Was & NXP-Debug-Probe mit Strom-/Energiemessung, ca.\ 45 CHF \\
+Kern & \R{LPC55S59}, Dual ARM Cortex-M33, 150\,MHz \\
+Debug & SWD für Targets von 1.2\,V bis 5\,V, SWO-Trace/Profiling,
+  Firmware wahlweise J-Link oder LinkServer (CMSIS-DAP) \\
+Messen & mit LinkServer-Debug-Firmware: \textbf{bis 200\,nA Auflösung},
+  typ.\ 1\,\% Genauigkeit \\
+Speisung & Target über das Debug-Kabel, 1.8\,V oder 3.3\,V, bis 350\,mA \\
+Extras & VCOM, I\textsuperscript{2}C- und SPI-Bridge; der verbaute
+  \R{LPC804} (Cortex-M0+) dient als Signalgenerator und als zweites DUT \\
+\end{ztab}
+
+\subsection{Messen mit LinkServer}
+\begin{lstlisting}
+LinkServer measure report -s current -t 6.0 -v auto -i 1.5
+  -s  Quelle (current)      -t  Messdauer [s]
+  -v  Spannung fuer Energie -i  Report-Intervall [s]
+\end{lstlisting}
+Die Ausgabe liefert pro Intervall \R{min}, \R{avg}, \R{max}, daraus
+$P$ und kumuliert $E$ -- genau die Zahlen, die ins Laborjournal gehören.
+Daneben gibt es \R{measure gui} (interaktiv) und \R{measure server}.
+
+\begin{bsp}[Low-Power-Modi am tinyK22, gemessen]
+Core-Clock 60\,MHz, blaue LED 100\,ms an, danach 1\,s im Low-Power-Modus
+(Messung mit Qoitech OTII):
+\begin{tabular}{@{}lrrr@{}}
+Modus & min & avg & max \\
+\R{RUN}  & 4.60\,mA & \textbf{4.89\,mA} & 5.59\,mA \\
+\R{WAIT} & 3.66\,mA & \textbf{4.02\,mA} & 5.72\,mA \\
+\R{STOP} & 2.95\,mA & \textbf{3.39\,mA} & 5.59\,mA \\
+\end{tabular}\\[2pt]
+\merkzeile Die Lehre daraus: von \R{RUN} nach \R{STOP} sinkt der
+Mittelwert nur um rund 30\,\%, nicht um Grössenordnungen -- weil die
+LED-Phase und die übrigen Board-Komponenten (Regler, K20-Debug-Chip,
+Pull-ups) weiterlaufen. \T{Der Modus des Cores ist nur ein Summand.}
+Wer Faktoren sehen will, muss die Peripherie und das Board mit
+einbeziehen.
+\end{bsp}
+
+\begin{bsp}[Eine LinkServer-Ausgabe lesen]
+\begin{lstlisting}
+Measuring Target current [50mA range] (@ 50000 samples/s)
+  for 6s with periodic report each 1.5s.
+Target voltage (auto-read): 3.22 V
+[0.0..1.5s]: 32.30 mA, 104.12 mW | Total: min = 31.10 mA,
+  avg = 32.30 mA, max = 33.56 mA, P = 104.12 mW, E = 43.38 uWh
+...
+Target current [50mA range] duration: 6.421 s (321056 samples)
+min = 30.87 mA, avg = 32.33 mA, max = 33.65 mA
+min = 99.50 mW, avg = 104.22 mW, max = 108.47 mW (3.22 V)
+E = 185.89 uWh
+\end{lstlisting}
+Gegenprobe: $P_{avg} = 3.22\,\text{V} \cdot 32.33\,\text{mA} =
+104.1\,\text{mW}$ -- stimmt. Und
+$E = 104.22\,\text{mW} \cdot 6.421\,\text{s} = 669\,\text{mWs}
+= 669/3600 = 186\,\text{\textmu Wh}$ -- stimmt ebenfalls.\\[2pt]
+\merkzeile \T{Immer gegenrechnen.} Passt $P \ne U \cdot I$, ist die
+Spannung falsch erfasst (\R{-v auto} liest sie, \R{-v <wert>} setzt sie
+fest). Passt $E \ne P \cdot t$, stimmt das Zeitfenster nicht -- genau
+der Grund, warum die \R{ENERGY}-Werte der drei Modi oben
+\emph{nicht} direkt vergleichbar sind, die Ströme aber schon.
+\end{bsp}
+
+\subsection{Zielhardware}
+\begin{ztab}{@{}lX@{}}
+\T{tinyK22} & \R{K22FN512}, ARM Cortex-M4F, bis 120\,MHz, in den
+  Messungen mit 60\,MHz Core-Clock. Hat FPU \ra Fliesskomma in Hardware
+  statt Software-Emulation, was Energie spart \\
+\T{LPC804} & ARM Cortex-M0+, klein und sparsam, 1.8\,V oder 3.3\,V.
+  Auf dem MCU-Link Pro als Signalgenerator und zweites DUT verbaut --
+  daran wird der \T{Einfluss von $V_{dd}$} gemessen \\
+\end{ztab}
+\merkzeile Die beiden sind absichtlich verschieden: der M0+ zeigt, was
+ein minimaler Kern verbraucht, der M4F, was Rechenleistung kostet.
+Dieselbe Sortieraufgabe auf beiden zu messen, ist die eigentliche
+Übung.
+
+\begin{falle}[Der Debug-Chip zählt mit]
+Beim tinyK22 sitzt neben dem K22 ein K20 als Debugger. Solange er
+gespeist ist, verbraucht er mit -- erkennbar daran, dass sich die
+gemessenen Werte nicht mit dem Datenblatt des K22 decken.
+\R{JP1} trennt ihn ab, wenn er nicht gebraucht wird. Wer
+Datenblattwerte reproduzieren will, muss das Board auf den nackten MCU
+reduzieren; wer das Produkt bewerten will, misst das ganze Board.
+\end{falle}
+
+\subsection{Entwicklungsumgebung}
+VS Code mit \T{DevContainer}: die Toolchain läuft im Docker-Container,
+die Projektdateien werden vom Host eingebunden.
+\begin{falle}[USB geht nicht durch den Container]
+USB-Passthrough nach Docker funktioniert unter Windows nicht. Lösung:
+\T{TCP/IP statt USB} -- der GDB-Server läuft auf dem \emph{Host}, der
+Debugger im Container verbindet sich über das Netz.
+\begin{lstlisting}
+# tinyK22 (J-Link), auf dem Host:
+JLinkGDBServerCL -select USB -device MK22FN512xxx12 \
+  -endian little -if SWD \
+  -rtos GDBServer/RTOSPlugin_FreeRTOS
+# LPC804 (LinkServer), auf dem Host:
+LinkServer gdbserver --keep-alive --allow-remote \
+  LPC804:LPCXpresso804
+\end{lstlisting}
+\end{falle}
+
+\subsection{Ausblick: wohin die Energie wirklich geht}
+\label{sec:ausblick}
+Heutige Rechner sind \T{prozessorzentriert} -- alle Daten müssen durch
+den Prozessor. Das ist der eigentliche Kostenpunkt:
+\begin{ztab}{@{}lX@{}}
+62.7\,\% & der gesamten Systemenergie mobiler Geräte geht für
+  \T{Datenbewegung} drauf, nicht für Rechnen (Google-Workloads,
+  ASPLOS 2018) \\
+$>$90\,\% & der Systemenergie grosser ML-Modelle entfällt auf den
+  Speicher (PACT 2021) \\
+\end{ztab}
+Deshalb der Trend zu tieferen und grösseren Speicherhierarchien
+(Ryzen 5000: 32\,kB L1 und 512\,kB L2 pro Core, 32\,MB L3 gemeinsam;
+IBM Power10: bis 30 Cores, 2\,MB L2 und 120\,MB L3 pro Core) -- und der
+Ansatz \T{Memory as an Accelerator}: im Speicher selbst rechnen
+(Processing-in-Memory), statt Daten zum Prozessor und zurück zu tragen.

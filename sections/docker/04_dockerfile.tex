@@ -1,0 +1,161 @@
+% !TEX root = ../../main_docker.tex
+% Dockerfile
+
+\section{Dockerfile}
+\label{sec:dockerfile}
+
+\subsection{Dockerfile: Aufbau und Build-Kontext}
+\begin{ztab}{@{}lX@{}}
+Format & \R{INSTRUKTION argument} -- Instruktion GROSS, Argumente klein \\
+Erste Zeile & muss \R{FROM} sein \\
+\R{\textbackslash} & Zeilenumbruch, wird vor der Ausführung entfernt (wie in C) \\
+\R{\#} & Kommentar, wird ebenfalls vorher entfernt \\
+\end{ztab}
+
+\SW{Build-Kontext} \R{docker build <kontext>} -- das Verzeichnis, das an
+den Daemon geht. Docker sucht dort die Datei \R{Dockerfile}, und der
+Build-Prozess kann auf \emph{alle} Dateien des Kontexts zugreifen.
+\begin{lstlisting}
+docker build . -t my_image                  # Standardfall
+docker build subdir1 -t my_image            # Kontext woanders
+docker build . -f Dockerfile.v1 -t my_image # anderes Dockerfile
+docker build subdir1 -f ../subdir2/Dockerfile.v1 -t my_image
+\end{lstlisting}
+
+\begin{falle}[„no such file or directory: Dockerfile“]
+Meldet der Build \R{transferring dockerfile: 2B}, liegt im Kontext keine
+Datei namens \R{Dockerfile} -- grosses D, Rest klein, \emph{keine} Endung
+(Linux ist case-sensitiv, \R{Dockerfile.txt} ist der Windows-Klassiker).
+Prüfen mit \R{ls -lA}.\\
+\R{-f} bestimmt nur die \emph{Bauanleitung}; der Kontext bleibt das
+Verzeichnis am Schluss. Alle \R{COPY}-Pfade sind relativ zum
+\emph{Kontext}, nicht zum Ort des Dockerfiles.
+\end{falle}
+
+\begin{formel}[Was beim Bauen passiert]
+Jeder Schritt erzeugt einen temporären Container-Layer und speichert ihn
+dann als Image ab -- technisch wie \R{docker commit}. Das zuletzt so
+erzeugte Image ist das Ergebnis. Wenn davon die Rede ist, „etwas im Image
+zu tun“, ist immer der Container gemeint, der das Image ergibt.
+\end{formel}
+
+\subsection{FROM, COPY, RUN}
+\SW{\R{FROM <image>}} legt das \T{Parent-Image} fest. Parent-Images haben
+selbst wieder Parents -- daher die Schichten:
+\R{kaohslu/epp-demo} $\to$ .NET-7.0-Runtime $\to$ Debian.
+Offizielle Images gibt es für Linux-Distributionen (\T{Busybox, Alpine,
+Debian, Ubuntu} -- von klein nach gross), Entwicklungsumgebungen
+(.NET, Python, GCC, Node.js) und OSS (MySQL, InfluxDB, Grafana, WordPress,
+Node-Red, Nginx) -- letztere enthalten selbst eine Linux-Distribution.
+
+\SW{\R{COPY <src> <dest>}} Quellen liegen im Build-Kontext des Hosts,
+absolut oder relativ dazu; ganze Verzeichnisse gehen auch. Mehrere Quellen
+nur, wenn \R{<dest>} ein Verzeichnis ist. Das Ziel ist absolut oder
+relativ zum \R{WORKDIR}.
+\begin{ztab}{@{}lX@{}}
+\R{COPY ["<src>","<dest>"]} & Klammerform, falls Pfade Leerzeichen haben \\
+\R{--chown=<user>:<group>} & Eigentümer im Image setzen \\
+\R{--chmod=<perms>} & Berechtigungen setzen \\
+\R{ADD} & wie \R{COPY}, aber mit „Magie“ (packt Archive automatisch aus)
+  \ra nur verwenden, wenn man genau das braucht \\
+\end{ztab}
+
+\SW{\R{RUN <cmd>}} führt Befehle im entstehenden Image aus: Pakete
+installieren, Compiler oder Archiv-Werkzeuge aufrufen. Die
+Dateisystemänderungen stehen dem nächsten Schritt zur Verfügung.
+\begin{ztab}{@{}lX@{}}
+\R{RUN echo "Hallo" > greeting.txt} & wirkt -- ändert das Dateisystem \\
+\R{RUN echo "Hallo"} & \textbf{wirkungslos} -- nur Konsolenausgabe, keine
+  Dateisystemänderung, bleibt im Image ohne Spur \\
+\end{ztab}
+In Dockerfiles nimmt man \T{\R{apt-get}} statt \R{apt} -- \R{apt-get} ist
+für Skripte gedacht, \R{apt} für Nutzerinteraktion.
+
+\begin{falle}[Shell-Form gegen Exec-Form]
+\R{RUN echo "x" > /tmp/f} läuft über \R{/bin/sh -c}, eine Shell
+interpretiert also das \R{>}. \R{RUN ["echo","x",">","/tmp/f"]} startet
+\R{echo} \emph{ohne} Shell -- \R{>} wird zum blossen Argument und die
+Datei entsteht nie. Bei \R{CMD} und \R{ENTRYPOINT} ist es umgekehrt: dort
+nimmt man die Klammerform.
+\end{falle}
+
+\subsection{Schichten im Image}
+\label{rez:layer}
+\begin{formel}[Die Regel]
+Jede Zeile im Dockerfile, \emph{die das Dateisystem ändert}, erzeugt einen
+eigenen Image-Layer. \R{CMD}, \R{ENTRYPOINT}, \R{ENV} und \R{LABEL}
+schreiben nur Metadaten \ra 0\,B, kein Layer. \R{WORKDIR} legt ein
+Verzeichnis an \ra doch ein Layer.
+\end{formel}
+\SW{Anzeigen} \R{docker inspect <image>}, Abschnitt \R{RootFS.Layers}
+(Anzahl und Hashes) $\cdot$ \R{docker history <image>} (die Instruktion
+hinter jeder Schicht und ihre Grösse).
+Debian hat nur einen Layer, Ubuntu zwei.
+
+\begin{bsp}[\R{nanodeb}: 3 Layer werden 2]
+\begin{lstlisting}
+FROM debian                    FROM debian
+RUN apt-get update             RUN apt-get update && \
+RUN apt-get install -y nano        apt-get install -y nano && \
+                                   apt-get clean && \
+                                   rm -rf /var/lib/apt/lists/*
+=> 3 Layer, 140 MB             => 2 Layer, 122 MB
+\end{lstlisting}
+Das \R{update} hinterlässt unnötige Daten in einer eigenen Schicht. Im
+selben \R{RUN} aufgeräumt, verschwinden sie -- in einem \emph{späteren}
+\R{RUN} gelöscht, blieben sie in der Schicht darunter liegen.
+\end{bsp}
+
+\SW{Best Practice} Zusammengehörige Kommandos in \emph{ein} \R{RUN} mit
+\R{\&\&} $\cdot$ unnötige Dateien im selben Schritt löschen
+(\R{apt-get clean}, \R{rm -rf /var/lib/apt/lists/*}) $\cdot$ sinnvolle
+Reihenfolge der Instruktionen, damit der \T{Build-Cache} möglichst lange
+greift. Eine geänderte Schicht macht alle darunterliegenden ungültig.
+
+\subsection{Startkommando: \R{CMD} und \R{ENTRYPOINT}}
+\label{form:entrypoint}
+\R{docker run <image> [command] [args...]} -- was gestartet wird, steht im
+Image unter \R{Config.Cmd} und \R{Config.Entrypoint}
+(\R{docker inspect}). Nützliches Alias:
+\begin{lstlisting}
+alias dentry="docker inspect -f \
+  'ENTRYPOINT:{{.Config.Entrypoint}}; CMD:{{.Config.Cmd}}'"
+\end{lstlisting}
+So hat \R{ubuntu} ein leeres ENTRYPOINT und \R{CMD ["/bin/bash"]} --
+deshalb startet dort ohne weitere Angabe eine \R{bash}.
+\R{kaohslu/epp-demo} hat \R{ENTRYPOINT ["dotnet","ASYD\_Demo.dll"]} und
+leeres CMD. Prüfen lässt sich das Ergebnis mit \R{docker top <cnt>}.
+
+\begin{formel}[Der entscheidende Unterschied]
+\R{CMD} gesetzt: \R{[command]} wird \emph{anstelle} von CMD ausgeführt.\\
+\R{ENTRYPOINT} gesetzt: \R{[command] [args...]} werden \emph{angehängt}.\\
+Beide gesetzt: ENTRYPOINT ist das Kommando, CMD liefert die
+Standard-Argumente dafür.
+\begin{tabularx}{\linewidth}{@{}llll@{}}
+ENTRYPOINT & CMD & \R{[command]} & ausgeführt wird \\
+\R{["script.sh"]} & -- & -- & \R{script.sh} \\
+\R{["script.sh"]} & -- & \R{/bin/bash} & \R{script.sh /bin/bash} \\
+\R{["script.sh"]} & \R{["mysqld"]} & -- & \R{script.sh mysqld} \\
+\R{["script.sh"]} & \R{["mysqld"]} & \R{/bin/bash} & \R{script.sh /bin/bash} \\
+-- & \R{["/bin/sh"]} & -- & \R{/bin/sh} \\
+-- & \R{["/bin/sh"]} & \R{/bin/bash} & \R{/bin/bash} \\
+\end{tabularx}
+\end{formel}
+
+\SW{\R{WORKDIR <pfad>}} setzt das Arbeitsverzeichnis für alle folgenden
+\R{RUN}, \R{CMD}, \R{ENTRYPOINT}, \R{COPY} und \R{ADD}. Es wird angelegt,
+auch wenn es gar nicht benutzt wird. Entspricht dem, was \R{pwd} im
+Container ausgibt.
+
+\begin{bsp}[Die \R{nanodeb}-Reihe]
+\begin{lstlisting}
+v3:  CMD ["nano","/greeting.txt"]
+     run ohne Arg  -> nano /greeting.txt
+     run mit bash  -> ersetzt CMD, startet bash
+v4:  ENTRYPOINT ["nano"]  CMD ["/greeting.txt"]
+     run ohne Arg  -> nano /greeting.txt
+     run mit main.c-> nano main.c
+v5:  + WORKDIR /app
+     run mit main.c-> nano /app/main.c
+\end{lstlisting}
+\end{bsp}
